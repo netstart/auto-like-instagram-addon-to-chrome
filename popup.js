@@ -99,11 +99,19 @@ const clamp = (v, lo, hi, fallback) => {
 };
 
 function normalize(raw) {
-  const s = { ...DEFAULTS, ...(raw || {}) };
+  const userProvided = raw || {};
+  const s = { ...DEFAULTS, ...userProvided };
   const P = PERSONALITIES[s.personality] || PERSONALITIES[DEFAULTS.personality];
 
-  s.maxFollowersPerProfile = Math.round(clamp(s.maxFollowersPerProfile, 1, 500, P.maxFollowersPerProfile));
-  s.maxLikesPerFollower = Math.round(clamp(s.maxLikesPerFollower, 1, 50, P.maxLikesPerFollower));
+  // Only use personality default if user didn't provide a value
+  const userProvidedMaxFollowers = "maxFollowersPerProfile" in userProvided;
+  const userProvidedMaxLikes = "maxLikesPerFollower" in userProvided;
+  s.maxFollowersPerProfile = userProvidedMaxFollowers
+    ? Math.round(clamp(s.maxFollowersPerProfile, 1, 500, P.maxFollowersPerProfile))
+    : P.maxFollowersPerProfile;
+  s.maxLikesPerFollower = userProvidedMaxLikes
+    ? Math.round(clamp(s.maxLikesPerFollower, 1, 50, P.maxLikesPerFollower))
+    : P.maxLikesPerFollower;
 
   s.delayBetweenFollowersFast = Math.round(clamp(s.delayBetweenFollowersFast, 3000, 120000, P.delayBetweenFollowersFast));
   s.delayBetweenFollowersSlow = Math.round(clamp(s.delayBetweenFollowersSlow, s.delayBetweenFollowersFast, 300000, P.delayBetweenFollowersSlow));
