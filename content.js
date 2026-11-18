@@ -1,8 +1,8 @@
 /* ck-auto-like-instagram - content script
- * Two modes:
- *  1. Feed mode (original): likes posts in your home feed
- *  2. Followers mode (new): goes to target profiles → their followers → likes N recent posts per follower
- * Both share the same likedCodes storage to never like the same post twice.
+ * Followers mode only: goes to target profiles → their followers → likes N recent posts per follower
+ * Optional: comments with random emojis on liked posts
+ * Uses likedCodes storage to never like the same post twice.
+ * Human-like delay engine with fatigue, burst/break patterns, and reading simulation.
  */
 (() => {
   "use strict";
@@ -12,7 +12,6 @@
   const KEY = "igAutoLike";
   const TAB_ID = "tab_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
   const MAX_TRACKED_POSTS = 2000;
-  const MAX_SCROLLS_FEED = 40;
   const MAX_SCROLLS_FOLLOWERS = 200;
   const MIN_BUTTON_PX = 18;
 
@@ -20,50 +19,199 @@
   const isInstagramHost = () =>
     /^https?:\/\/(www\.)?instagram\.com\//.test(location.href) || window.__igalTestMode === true;
 
-  const DEFAULTS = {
-    // Feed mode
-    feedEnabled: false,
-    feedMinDelay: 3000,
-    feedMaxDelay: 8000,
-    feedMaxLikes: 20,
-    feedAutoScroll: true,
+  const DEFAULT_EMOJIS = [
+    "❤️", "🔥", "😍", "👏", "🙌", "😎", "💯", "✨", "🌟", "💪",
+    "🎉", "🥰", "😊", "👍", "💖", "🌈", "☀️", "🌸", "🦄", "🍀"
+  ];
 
-    // Followers mode
-    followersEnabled: false,
-    targets: [],                    // ["profile1", "profile2", ...]
-    maxFollowersPerProfile: 20,
-    maxLikesPerFollower: 3,
-    delayBetweenFollowersMin: 10000,
-    delayBetweenFollowersMax: 20000,
-    delayBetweenLikesMin: 5000,
-    delayBetweenLikesMax: 10000,
-    delayBetweenProfilesMin: 30000,
-    delayBetweenProfilesMax: 60000,
+  // ============================================================
+  // HUMAN-LIKE DELAY ENGINE
+  // ============================================================
+
+  /**
+   * Generates human-like delays using log-normal distribution
+   * Humans don't use uniform random - they cluster around a "comfortable" time
+   * with long tails for distractions, reading, hesitation
+   */
+  function humanDelay(medianMs, spread = 0.5, minMs = 500, maxMs = 300000) {
+    // Log-normal: ln(X) ~ Normal(ln(median), spread)
+    // This creates right-skewed distribution like real human reaction times
+    const u = Math.random();
+    const v = Math.random();
+    // Box-Muller transform for normal distribution
+    const z = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+    const lnMedian = Math.log(medianMs);
+    const delay = Math.exp(lnMedian + spread * z);
+    return Math.round(Math.min(maxMs, Math.max(minMs, delay)));
+  }
+
+  /**
+   * Mixture model: sometimes humans are "in flow" (fast), sometimes "distracted" (slow)
+   */
+  function mixedHumanDelay(fastMedian, slowMedian, fastProb = 0.7, spread = 0.4) {
+    return Math.random() < fastProb
+      ? humanDelay(fastMedian, spread)
+      : humanDelay(slowMedian, spread * 1.5);
+  }
+
+  /**
+   * Reading time simulation based on content type
+   */
+  function readingTime(hasVideo = false, captionLength = 0) {
+    // Base reading: 1.5-4s for photo, 3-8s for video (watch time)
+    const base = hasVideo ? humanDelay(5000, 0.4, 2000, 15000) : humanDelay(2500, 0.5, 1000, 8000);
+    // Caption reading: ~200 chars/min = ~3 chars/sec
+    const captionTime = Math.min(captionLength * 300, 10000); // cap at 10s
+    return base + captionTime;
+  }
+
+  /**
+   * Session fatigue: humans slow down over time
+   */
+  function applyFatigue(baseDelay, actionsInSession, fatigueFactor = 0.02) {
+    // Each action adds ~2% delay, caps at 2x
+    const fatigue = Math.min(1 + actionsInSession * fatigueFactor, 2.0);
+    return Math.round(baseDelay * fatigue);
+  }
+
+  /**
+   * Micro-pause: brief hesitation before action (0.3-1.5s)
+   */
+  function microPause() {
+    return humanDelay(600, 0.6, 200, 2000);
+  }
+
+  /**
+   * Post-action pause: after like/comment, brief satisfaction pause (0.5-2s)
+   */
+  function postActionPause() {
+    return humanDelay(1000, 0.5, 300, 3000);
+  }
+
+  // ============================================================
+  // PRESET PERSONALITIES
+  // ============================================================
+
+  const PERSONALITIES = {
+    careful: {
+      name: "Careful Observer",
+      description: "Slow, reads captions, watches videos, low probability actions",
+      // Delays (median ms)
+      betweenFollowers: { fast: 25000, slow: 60000 },      // 25-60s
+      betweenLikes: { fast: 12000, slow: 30000 },          // 12-30s
+      betweenProfiles: { fast: 90000, slow: 180000 },      // 1.5-3min
+      // Behavior
+      commentProbability: 15,
+      maxFollowersPerProfile: 8,
+      maxLikesPerFollower: 2,
+      watchVideoProbability: 0.8,
+      readCaptionProbability: 0.9,
+      sessionBreakEvery: 15,      // actions before long break
+      sessionBreakDuration: { min: 120000, max: 300000 }, // 2-5 min
+    },
+    casual: {
+      name: "Casual Browser",
+      description: "Natural pace, sometimes reads, sometimes skims, moderate activity",
+      betweenFollowers: { fast: 15000, slow: 35000 },      // 15-35s
+      betweenLikes: { fast: 8000, slow: 20000 },           // 8-20s
+      betweenProfiles: { fast: 60000, slow: 120000 },      // 1-2min
+      commentProbability: 35,
+      maxFollowersPerProfile: 12,
+      maxLikesPerFollower: 3,
+      watchVideoProbability: 0.5,
+      readCaptionProbability: 0.6,
+      sessionBreakEvery: 25,
+      sessionBreakDuration: { min: 60000, max: 180000 },  // 1-3 min
+    },
+    efficient: {
+      name: "Efficient Scroller",
+      description: "Faster pace, skims content, higher volume, still human-like",
+      betweenFollowers: { fast: 8000, slow: 18000 },       // 8-18s
+      betweenLikes: { fast: 4000, slow: 10000 },           // 4-10s
+      betweenProfiles: { fast: 30000, slow: 60000 },       // 30-60s
+      commentProbability: 20,
+      maxFollowersPerProfile: 20,
+      maxLikesPerFollower: 4,
+      watchVideoProbability: 0.3,
+      readCaptionProbability: 0.3,
+      sessionBreakEvery: 40,
+      sessionBreakDuration: { min: 30000, max: 90000 },   // 30-90s
+    },
+    // Default = casual
+  };
+
+  // ============================================================
+  // DEFAULTS - Using "casual" personality as base
+  // ============================================================
+
+  const DEFAULT_PERSONALITY = "casual";
+  const P = PERSONALITIES[DEFAULT_PERSONALITY];
+
+  const DEFAULTS = {
+    // Personality
+    personality: DEFAULT_PERSONALITY,
+
+    // Followers mode limits (from personality)
+    maxFollowersPerProfile: P.maxFollowersPerProfile,
+    maxLikesPerFollower: P.maxLikesPerFollower,
+
+    // Delay configuration (ms) - medians for humanDelay
+    delayBetweenFollowersFast: P.betweenFollowers.fast,
+    delayBetweenFollowersSlow: P.betweenFollowers.slow,
+    delayBetweenLikesFast: P.betweenLikes.fast,
+    delayBetweenLikesSlow: P.betweenLikes.slow,
+    delayBetweenProfilesFast: P.betweenProfiles.fast,
+    delayBetweenProfilesSlow: P.betweenProfiles.slow,
+
+    // Session breaks
+    sessionBreakEvery: P.sessionBreakEvery,
+    sessionBreakMin: P.sessionBreakDuration.min,
+    sessionBreakMax: P.sessionBreakDuration.max,
+
+    // Content interaction
+    watchVideoProbability: P.watchVideoProbability,
+    readCaptionProbability: P.readCaptionProbability,
+
+    // Comments
+    commentsEnabled: false,
+    commentEmojis: DEFAULT_EMOJIS.join(" "),
+    commentProbability: P.commentProbability,
+    commentDelayMin: 2000,
+    commentDelayMax: 5000,
 
     // Shared
+    enabled: false,
+    targets: [],
     likeCount: 0,
+    commentCount: 0,
     likedCodes: [],
     owner: "",
+    // Runtime
+    actionsInSession: 0,
+    lastSessionBreak: 0,
   };
 
   let state = { ...DEFAULTS };
   let timer = null;
   let running = false;
-  let scrolls = 0;
   let clicked = new Set();
   let statusText = "Idle";
 
   // Followers-mode runtime state
   let followersState = {
-    phase: "idle",              // idle, navigating, collectingFollowers, processingFollower, openingProfile, collectingPosts, likingPost, waiting
+    phase: "idle",
     targetIndex: 0,
     followerIndex: 0,
-    followersList: [],          // [{username, href}]
-    postsList: [],              // [{href, code}]
+    followersList: [],
+    postsList: [],
     postIndex: 0,
     likesDoneForFollower: 0,
     originalUrl: "",
     abortRequested: false,
+    currentPostCode: null,
+    shouldComment: false,
+    currentPostHasVideo: false,
+    currentCaptionLength: 0,
   };
 
   /* ---------------------------------------------------------------- state */
@@ -76,26 +224,50 @@
 
   function normalize(raw) {
     const s = { ...DEFAULTS, ...(raw || {}) };
-    s.feedMinDelay = Math.round(clamp(s.feedMinDelay, 300, 600000, DEFAULTS.feedMinDelay));
-    s.feedMaxDelay = Math.round(clamp(s.feedMaxDelay, s.feedMinDelay, 900000, Math.max(s.feedMinDelay, DEFAULTS.feedMaxDelay)));
-    s.feedMaxLikes = Math.round(clamp(s.feedMaxLikes, 1, 500, DEFAULTS.feedMaxLikes));
-    s.feedAutoScroll = Boolean(s.feedAutoScroll);
+    // Personality update
+    if (PERSONALITIES[s.personality]) {
+      const P = PERSONALITIES[s.personality];
+      s.maxFollowersPerProfile = Math.round(clamp(s.maxFollowersPerProfile, 1, 500, P.maxFollowersPerProfile));
+      s.maxLikesPerFollower = Math.round(clamp(s.maxLikesPerFollower, 1, 50, P.maxLikesPerFollower));
+    } else {
+      s.maxFollowersPerProfile = Math.round(clamp(s.maxFollowersPerProfile, 1, 500, DEFAULTS.maxFollowersPerProfile));
+      s.maxLikesPerFollower = Math.round(clamp(s.maxLikesPerFollower, 1, 50, DEFAULTS.maxLikesPerFollower));
+    }
 
-    s.maxFollowersPerProfile = Math.round(clamp(s.maxFollowersPerProfile, 1, 500, DEFAULTS.maxFollowersPerProfile));
-    s.maxLikesPerFollower = Math.round(clamp(s.maxLikesPerFollower, 1, 50, DEFAULTS.maxLikesPerFollower));
-    s.delayBetweenFollowersMin = Math.round(clamp(s.delayBetweenFollowersMin, 1000, 3600000, DEFAULTS.delayBetweenFollowersMin));
-    s.delayBetweenFollowersMax = Math.round(clamp(s.delayBetweenFollowersMax, s.delayBetweenFollowersMin, 3600000, DEFAULTS.delayBetweenFollowersMax));
-    s.delayBetweenLikesMin = Math.round(clamp(s.delayBetweenLikesMin, 1000, 3600000, DEFAULTS.delayBetweenLikesMin));
-    s.delayBetweenLikesMax = Math.round(clamp(s.delayBetweenLikesMax, s.delayBetweenLikesMin, 3600000, DEFAULTS.delayBetweenLikesMax));
-    s.delayBetweenProfilesMin = Math.round(clamp(s.delayBetweenProfilesMin, 1000, 3600000, DEFAULTS.delayBetweenProfilesMin));
-    s.delayBetweenProfilesMax = Math.round(clamp(s.delayBetweenProfilesMax, s.delayBetweenProfilesMin, 3600000, DEFAULTS.delayBetweenProfilesMax));
+    // Delays (medians for humanDelay)
+    s.delayBetweenFollowersFast = Math.round(clamp(s.delayBetweenFollowersFast, 3000, 120000, DEFAULTS.delayBetweenFollowersFast));
+    s.delayBetweenFollowersSlow = Math.round(clamp(s.delayBetweenFollowersSlow, s.delayBetweenFollowersFast, 300000, DEFAULTS.delayBetweenFollowersSlow));
+    s.delayBetweenLikesFast = Math.round(clamp(s.delayBetweenLikesFast, 2000, 60000, DEFAULTS.delayBetweenLikesFast));
+    s.delayBetweenLikesSlow = Math.round(clamp(s.delayBetweenLikesSlow, s.delayBetweenLikesFast, 120000, DEFAULTS.delayBetweenLikesSlow));
+    s.delayBetweenProfilesFast = Math.round(clamp(s.delayBetweenProfilesFast, 10000, 300000, DEFAULTS.delayBetweenProfilesFast));
+    s.delayBetweenProfilesSlow = Math.round(clamp(s.delayBetweenProfilesSlow, s.delayBetweenProfilesFast, 600000, DEFAULTS.delayBetweenProfilesSlow));
 
+    // Session breaks
+    s.sessionBreakEvery = Math.round(clamp(s.sessionBreakEvery, 5, 100, DEFAULTS.sessionBreakEvery));
+    s.sessionBreakMin = Math.round(clamp(s.sessionBreakMin, 10000, 600000, DEFAULTS.sessionBreakMin));
+    s.sessionBreakMax = Math.round(clamp(s.sessionBreakMax, s.sessionBreakMin, 1200000, DEFAULTS.sessionBreakMax));
+
+    // Content interaction
+    s.watchVideoProbability = clamp(s.watchVideoProbability, 0, 1, DEFAULTS.watchVideoProbability);
+    s.readCaptionProbability = clamp(s.readCaptionProbability, 0, 1, DEFAULTS.readCaptionProbability);
+
+    // Comments
+    s.commentsEnabled = Boolean(s.commentsEnabled);
+    s.commentProbability = Math.round(clamp(s.commentProbability, 0, 100, DEFAULTS.commentProbability));
+    s.commentDelayMin = Math.round(clamp(s.commentDelayMin, 500, 60000, DEFAULTS.commentDelayMin));
+    s.commentDelayMax = Math.round(clamp(s.commentDelayMax, s.commentDelayMin, 60000, DEFAULTS.commentDelayMax));
+    s.commentEmojis = typeof s.commentEmojis === "string" ? s.commentEmojis : DEFAULT_EMOJIS.join(" ");
+
+    s.enabled = Boolean(s.enabled);
     s.likeCount = Math.round(clamp(s.likeCount, 0, 100000, 0));
+    s.commentCount = Math.round(clamp(s.commentCount, 0, 100000, 0));
     s.owner = typeof s.owner === "string" ? s.owner : "";
     s.targets = Array.isArray(s.targets) ? s.targets.filter(t => typeof t === "string" && t.trim()).map(t => t.trim().replace(/^@/, "")) : [];
     s.likedCodes = Array.isArray(s.likedCodes)
       ? s.likedCodes.filter(c => typeof c === "string").slice(-MAX_TRACKED_POSTS)
       : [];
+    s.actionsInSession = Math.round(clamp(s.actionsInSession, 0, 10000, 0));
+    s.lastSessionBreak = Math.round(clamp(s.lastSessionBreak, 0, Date.now(), 0));
     return s;
   }
 
@@ -109,30 +281,60 @@
 
   function load() {
     chrome.storage.local.get(KEY, (res) => {
-      const beforeFeed = state.feedEnabled;
-      const beforeFollowers = state.followersEnabled;
+      const before = state.enabled;
       state = normalize(res[KEY]);
       clicked = new Set(state.likedCodes);
 
-      if (state.feedEnabled && (!state.owner || state.owner === TAB_ID)) {
-        claimAndStartFeed();
-      } else if (state.feedEnabled && beforeFeed !== state.feedEnabled) {
-        setStatus("Feed mode running in another tab");
-      }
-
-      if (state.followersEnabled && (!state.owner || state.owner === TAB_ID)) {
-        claimAndStartFollowers();
-      } else if (state.followersEnabled && beforeFollowers !== state.followersEnabled) {
-        setStatus("Followers mode running in another tab");
+      if (state.enabled && (!state.owner || state.owner === TAB_ID)) {
+        claimAndStart();
+      } else if (state.enabled && before !== state.enabled) {
+        setStatus("Running in another tab");
       }
 
       paint();
     });
   }
 
-  /* ---------------------------------------------------------------- utils */
+  /* ---------------------------------------------------------------- Human Delay Helpers */
 
   const randInt = (lo, hi) => Math.round(lo + Math.random() * Math.max(0, hi - lo));
+  const randChoice = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+  function humanDelay(medianMs, spread = 0.5, minMs = 500, maxMs = 300000) {
+    const u = Math.random();
+    const v = Math.random();
+    const z = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+    const lnMedian = Math.log(medianMs);
+    const delay = Math.exp(lnMedian + spread * z);
+    return Math.round(Math.min(maxMs, Math.max(minMs, delay)));
+  }
+
+  function mixedHumanDelay(fastMedian, slowMedian, fastProb = 0.7, spread = 0.4) {
+    return Math.random() < fastProb
+      ? humanDelay(fastMedian, spread)
+      : humanDelay(slowMedian, spread * 1.5);
+  }
+
+  function readingTime(hasVideo, captionLength) {
+    const base = hasVideo
+      ? humanDelay(5000, 0.4, 2000, 15000)
+      : humanDelay(2500, 0.5, 1000, 8000);
+    const captionTime = Math.min(captionLength * 300, 10000);
+    return base + captionTime;
+  }
+
+  function applyFatigue(baseDelay, actionsInSession, fatigueFactor = 0.02) {
+    const fatigue = Math.min(1 + actionsInSession * fatigueFactor, 2.0);
+    return Math.round(baseDelay * fatigue);
+  }
+
+  function microPause() {
+    return humanDelay(600, 0.6, 200, 2000);
+  }
+
+  function postActionPause() {
+    return humanDelay(1000, 0.5, 300, 3000);
+  }
 
   function schedule(ms) {
     clearTimeout(timer);
@@ -142,7 +344,7 @@
   function setStatus(text) {
     statusText = text;
     if (el.status) el.status.textContent = text;
-    console.log("[AutoLike]", text);
+    console.log("[ck-auto-like]", text);
   }
 
   function postCode(el) {
@@ -200,13 +402,9 @@
       }
     }
     state.likeCount += 1;
+    state.actionsInSession += 1;
     save();
     return true;
-  }
-
-  function scrollFeed() {
-    if (document.querySelector('div[role="dialog"]')) return;
-    window.scrollBy({ top: Math.round(window.innerHeight * 0.8), left: 0, behavior: "smooth" });
   }
 
   function scrollFollowersModal() {
@@ -222,76 +420,71 @@
     return /Action Blocked|Try Again Later|Challenge Required|Too Many Requests|Please wait/i.test(text);
   }
 
-  /* ----------------------------------------------------------- Feed mode */
+  /* ------------------------------------------------------- Comment logic */
 
-  function claimAndStartFeed() {
-    if (state.owner && state.owner !== TAB_ID) {
-      setStatus("Running in another tab");
-      return;
-    }
-    state.owner = TAB_ID;
-    state.feedEnabled = true;
-    save();
-    running = true;
-    scrolls = 0;
-    setStatus("Feed: Running...");
-    paint();
-    schedule(700);
+  function getRandomEmoji() {
+    const emojis = state.commentEmojis.trim().split(/\s+/).filter(Boolean);
+    return emojis.length ? randChoice(emojis) : randChoice(DEFAULT_EMOJIS);
   }
 
-  function stopFeed(message) {
-    state.feedEnabled = false;
-    if (state.owner === TAB_ID) state.owner = "";
-    save();
-    setStatus(message || "Feed: Stopped");
-    paint();
+  function shouldCommentNow() {
+    if (!state.commentsEnabled) return false;
+    return Math.random() * 100 < state.commentProbability;
   }
 
-  function stepFeed() {
-    if (!state.feedEnabled) return;
-    if (!isInstagramHost()) return stopFeed("Feed: Not on instagram.com");
-    if (state.likeCount >= state.feedMaxLikes) return stopFeed("Feed: Finished - " + state.likeCount + " likes");
+  async function typeComment(emoji) {
+    const dialog = document.querySelector('div[role="dialog"]');
+    if (!dialog) return false;
 
-    const active = document.activeElement;
-    if (active && (/^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName) || active.isContentEditable)) {
-      setStatus("Feed: Waiting while you type");
-      return schedule(1500);
+    const textarea = dialog.querySelector('textarea[aria-label*="comment" i], textarea[placeholder*="comment" i], textarea[placeholder*="Coment" i]');
+    if (!textarea) return false;
+
+    textarea.focus();
+    textarea.value = "";
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+
+    for (const char of emoji) {
+      textarea.value += char;
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      await new Promise(r => setTimeout(r, randInt(100, 300)));
     }
 
-    const button = pickLikeButton();
-    if (!button) {
-      if (state.feedAutoScroll && scrolls < MAX_SCROLLS_FEED) {
-        scrolls += 1;
-        scrollFeed();
-        setStatus("Feed: Scrolling for posts...");
-      } else {
-        setStatus("Feed: No unliked posts in view");
+    const buttons = dialog.querySelectorAll('button, div[role="button"]');
+    let submitted = false;
+    for (const btn of buttons) {
+      const txt = (btn.textContent || btn.innerText || "").trim().toLowerCase();
+      if (txt === "post" || txt === "publicar") {
+        btn.click();
+        submitted = true;
+        break;
       }
-      return schedule(randInt(1200, 2600));
     }
 
-    doLike(button);
-    setStatus("Feed: Liked " + state.likeCount + " of " + state.feedMaxLikes);
-    paint();
-    schedule(randInt(state.feedMinDelay, state.feedMaxDelay));
+    if (!submitted) {
+      const event = new KeyboardEvent("keydown", { key: "Enter", code: "Enter", which: 13, keyCode: 13, bubbles: true });
+      textarea.dispatchEvent(event);
+    }
+
+    return true;
   }
 
-  /* ------------------------------------------------------- Followers mode */
+  /* ----------------------------------------------------------- Followers mode */
 
-  function claimAndStartFollowers() {
+  function claimAndStart() {
     if (state.owner && state.owner !== TAB_ID) {
       setStatus("Running in another tab");
       return;
     }
     if (!state.targets.length) {
-      setStatus("Followers: No target profiles set");
-      state.followersEnabled = false;
+      setStatus("No target profiles set");
+      state.enabled = false;
       save();
       paint();
       return;
     }
     state.owner = TAB_ID;
-    state.followersEnabled = true;
+    state.enabled = true;
+    state.actionsInSession = 0;
     save();
     running = true;
     followersState = {
@@ -304,18 +497,22 @@
       likesDoneForFollower: 0,
       originalUrl: location.href,
       abortRequested: false,
+      currentPostCode: null,
+      shouldComment: false,
+      currentPostHasVideo: false,
+      currentCaptionLength: 0,
     };
-    setStatus("Followers: Starting...");
+    setStatus("Starting...");
     paint();
     schedule(500);
   }
 
-  function stopFollowers(message) {
-    state.followersEnabled = false;
+  function stop(message) {
+    state.enabled = false;
     followersState.abortRequested = true;
     if (state.owner === TAB_ID) state.owner = "";
     save();
-    setStatus(message || "Followers: Stopped");
+    setStatus(message || "Stopped");
     paint();
   }
 
@@ -330,39 +527,54 @@
     });
   }
 
-  function stepFollowers() {
-    if (!state.followersEnabled) return;
-    if (followersState.abortRequested) return stopFollowers("Followers: Aborted");
+  function getCurrentPersonality() {
+    return PERSONALITIES[state.personality] || PERSONALITIES[DEFAULT_PERSONALITY];
+  }
+
+  function step() {
+    timer = null;
+    if (!running) return;
+    if (!state.enabled) return;
 
     if (!isInstagramHost()) {
-      return stopFollowers("Followers: Not on instagram.com");
+      return stop("Not on instagram.com");
     }
 
     if (detectActionBlock()) {
-      return stopFollowers("Followers: Action Blocked detected - stopping for safety");
+      return stop("Action Blocked detected - stopping for safety");
     }
 
-    const { phase, targetIndex, followerIndex, followersList, postsList, postIndex, likesDoneForFollower } = followersState;
+    // Check for session break
+    if (state.actionsInSession > 0 && state.actionsInSession % state.sessionBreakEvery === 0
+        && state.actionsInSession !== state.lastSessionBreak) {
+      const breakDuration = randInt(state.sessionBreakMin, state.sessionBreakMax);
+      state.lastSessionBreak = state.actionsInSession;
+      save();
+      setStatus(`Session break (${Math.round(breakDuration/1000)}s) - mimicking human fatigue`);
+      schedule(breakDuration);
+      return;
+    }
+
+    const { phase, targetIndex, followerIndex, followersList, postsList, postIndex, likesDoneForFollower, currentPostHasVideo, currentCaptionLength } = followersState;
     const targets = state.targets;
     const currentTarget = targets[targetIndex];
 
     switch (phase) {
       case "navigating": {
-        setStatus(`Followers: Opening @${currentTarget}/followers/`);
+        setStatus(`Opening @${currentTarget}/followers/`);
         navigateTo(`https://www.instagram.com/${currentTarget}/followers/`);
         followersState.phase = "collectingFollowers";
         followersState.followersList = [];
         followersState.followerIndex = 0;
-        scrolls = 0;
-        schedule(3000);
+        schedule(mixedHumanDelay(3000, 8000, 0.6)); // initial page load
         break;
       }
 
       case "collectingFollowers": {
         const dialog = document.querySelector('div[role="dialog"]');
         if (!dialog) {
-          setStatus("Followers: Followers modal not found");
-          return schedule(2000);
+          setStatus("Followers modal not found");
+          return schedule(mixedHumanDelay(2000, 5000));
         }
         const links = dialog.querySelectorAll('a[href^="/"]');
         const newFollowers = [];
@@ -373,60 +585,58 @@
             newFollowers.push({ username: match[1], href });
           }
         });
-        // Deduplicate
         const seen = new Set(followersList.map(f => f.username));
         newFollowers.forEach(f => { if (!seen.has(f.username)) { followersList.push(f); seen.add(f.username); } });
 
-        if (followersList.length >= state.maxFollowersPerProfile || scrolls >= MAX_SCROLLS_FOLLOWERS) {
-          setStatus(`Followers: Collected ${followersList.length} followers for @${currentTarget}`);
+        if (followersList.length >= state.maxFollowersPerProfile) {
+          setStatus(`Collected ${followersList.length} followers for @${currentTarget}`);
           followersState.phase = "processingFollower";
           followersState.followerIndex = 0;
-          schedule(1000);
+          schedule(microPause());
         } else {
-          scrolls++;
           scrollFollowersModal();
-          setStatus(`Followers: Scrolling followers (${followersList.length}/${state.maxFollowersPerProfile})...`);
-          schedule(randInt(1500, 3000));
+          setStatus(`Scrolling followers (${followersList.length}/${state.maxFollowersPerProfile})...`);
+          schedule(mixedHumanDelay(1500, 4000, 0.7));
         }
         break;
       }
 
       case "processingFollower": {
         if (followerIndex >= followersList.length) {
-          // Done with this target, move to next
           if (targetIndex + 1 < targets.length) {
             followersState.targetIndex++;
             followersState.phase = "navigating";
-            setStatus(`Followers: Moving to next target @${targets[targetIndex + 1]}`);
-            schedule(randInt(state.delayBetweenProfilesMin, state.delayBetweenProfilesMax));
+            setStatus(`Moving to next target @${targets[targetIndex + 1]}`);
+            const P = getCurrentPersonality();
+            const delay = mixedHumanDelay(P.betweenProfiles.fast, P.betweenProfiles.slow, 0.6);
+            schedule(applyFatigue(delay, state.actionsInSession));
           } else {
-            setStatus(`Followers: All targets done. Total likes: ${state.likeCount}`);
-            stopFollowers("Followers: Finished all targets");
+            setStatus(`All targets done. Likes: ${state.likeCount}, Comments: ${state.commentCount}`);
+            stop("Finished all targets");
           }
           break;
         }
 
         const follower = followersList[followerIndex];
-        setStatus(`Followers: [@${currentTarget}] Opening follower @${follower.username} (${followerIndex + 1}/${followersList.length})`);
+        setStatus(`[@${currentTarget}] Opening follower @${follower.username} (${followerIndex + 1}/${followersList.length})`);
         followersState.originalUrl = location.href;
         navigateTo(`https://www.instagram.com/${follower.username}/`);
         followersState.phase = "openingProfile";
-        schedule(3000);
+        schedule(mixedHumanDelay(2000, 6000, 0.6));
         break;
       }
 
       case "openingProfile": {
-        // Wait for profile page to load, then collect posts
         const articles = document.querySelectorAll('main article, div[role="feed"] article');
         if (articles.length === 0) {
-          setStatus("Followers: Profile not loaded yet");
-          return schedule(2000);
+          setStatus("Profile not loaded yet");
+          return schedule(mixedHumanDelay(1500, 4000));
         }
         followersState.postsList = [];
         followersState.postIndex = 0;
         followersState.likesDoneForFollower = 0;
         followersState.phase = "collectingPosts";
-        schedule(500);
+        schedule(microPause());
         break;
       }
 
@@ -437,23 +647,24 @@
           const href = a.getAttribute("href");
           const code = postCodeFromHref(href);
           if (code && !clicked.has(code)) {
-            newPosts.push({ href, code });
+            // Check if video (reel)
+            const article = a.closest("article");
+            const hasVideo = article?.querySelector('video, svg[aria-label*="Reel" i]') !== null;
+            newPosts.push({ href, code, hasVideo });
           }
         });
-        // Deduplicate
         const seen = new Set(followersState.postsList.map(p => p.code));
         newPosts.forEach(p => { if (!seen.has(p.code)) { followersState.postsList.push(p); seen.add(p.code); } });
 
         if (followersState.postsList.length >= state.maxLikesPerFollower) {
-          setStatus(`Followers: Found ${followersState.postsList.length} posts for @${followersList[followerIndex].username}`);
+          setStatus(`Found ${followersState.postsList.length} posts for @${followersList[followerIndex].username}`);
           followersState.phase = "likingPost";
           followersState.postIndex = 0;
-          schedule(500);
+          schedule(microPause());
         } else {
-          // Scroll for more posts
           window.scrollBy({ top: window.innerHeight, left: 0, behavior: "smooth" });
-          setStatus(`Followers: Scrolling for posts (${followersState.postsList.length}/${state.maxLikesPerFollower})...`);
-          schedule(randInt(1500, 3000));
+          setStatus(`Scrolling for posts (${followersState.postsList.length}/${state.maxLikesPerFollower})...`);
+          schedule(mixedHumanDelay(1500, 4000, 0.7));
         }
         break;
       }
@@ -461,82 +672,154 @@
       case "likingPost": {
         if (followersState.postIndex >= followersState.postsList.length ||
             followersState.likesDoneForFollower >= state.maxLikesPerFollower) {
-          // Done with this follower
           followersState.followerIndex++;
           followersState.phase = "processingFollower";
-          setStatus(`Followers: Done with @${followersList[followerIndex - 1].username}, moving to next follower`);
-          schedule(randInt(state.delayBetweenFollowersMin, state.delayBetweenFollowersMax));
+          setStatus(`Done with @${followersList[followerIndex - 1].username}, moving to next follower`);
+          const P = getCurrentPersonality();
+          const delay = mixedHumanDelay(P.betweenFollowers.fast, P.betweenFollowers.slow, 0.7);
+          schedule(applyFatigue(delay, state.actionsInSession));
           break;
         }
 
         const post = followersState.postsList[followersState.postIndex];
-        setStatus(`Followers: Liking post ${post.code} (${followersState.postIndex + 1}/${followersState.postsList.length})`);
+        followersState.currentPostCode = post.code;
+        followersState.currentPostHasVideo = post.hasVideo || post.href.includes("/reel/");
+        followersState.currentCaptionLength = 0; // Could extract caption if needed
+        followersState.shouldComment = shouldCommentNow();
+        setStatus(`Liking post ${post.code} (${followersState.postIndex + 1}/${followersState.postsList.length})`);
         navigateTo(`https://www.instagram.com${post.href}`);
         followersState.phase = "waitingForPostModal";
-        schedule(2000);
+        schedule(mixedHumanDelay(1500, 4000, 0.6));
         break;
       }
 
       case "waitingForPostModal": {
         const dialog = document.querySelector('div[role="dialog"]');
         if (!dialog) {
-          setStatus("Followers: Post modal not opened");
+          setStatus("Post modal not opened");
           followersState.postIndex++;
           followersState.phase = "likingPost";
-          schedule(1000);
+          schedule(microPause());
           break;
         }
-        // Find like button in modal
+
+        // Simulate reading/watching before like
+        const P = getCurrentPersonality();
+        const shouldRead = Math.random() < P.readCaptionProbability;
+        const shouldWatch = followersState.currentPostHasVideo && Math.random() < P.watchVideoProbability;
+
+        if (shouldRead || shouldWatch) {
+          const readTime = readingTime(shouldWatch, followersState.currentCaptionLength);
+          const fatiguedTime = applyFatigue(readTime, state.actionsInSession);
+          setStatus(shouldWatch ? `Watching video...` : `Reading caption...`);
+          schedule(fatiguedTime);
+          // Stay in this phase, will re-enter and then like
+          followersState.phase = "waitingForPostModal";
+          // Mark that we've "viewed" it
+          followersState.currentCaptionLength = -1; // sentinel: already viewed
+          return;
+        }
+
+        // Micro-pause before like (hesitation)
+        schedule(microPause());
+        followersState.phase = "doingLike";
+        break;
+      }
+
+      case "doingLike": {
+        const dialog = document.querySelector('div[role="dialog"]');
+        if (!dialog) {
+          setStatus("Post modal closed unexpectedly");
+          followersState.postIndex++;
+          followersState.phase = "likingPost";
+          schedule(microPause());
+          break;
+        }
+
         const likeBtn = dialog.querySelector('svg[aria-label="Like" i]');
         if (likeBtn && isClickableLike(likeBtn)) {
           const code = postCode(likeBtn);
           if (code && !clicked.has(code)) {
             doLike(likeBtn);
             followersState.likesDoneForFollower++;
-            setStatus(`Followers: Liked ${state.likeCount} total (${followersState.likesDoneForFollower}/${state.maxLikesPerFollower} for this follower)`);
+            setStatus(`Liked ${state.likeCount} total (${followersState.likesDoneForFollower}/${state.maxLikesPerFollower} for this follower)`);
             paint();
           }
         } else {
-          setStatus("Followers: Like button not found or already liked");
+          setStatus("Like button not found or already liked");
         }
-        // Close modal
+
+        // Post-action pause (satisfaction)
+        schedule(postActionPause());
+        followersState.phase = "afterLike";
+        break;
+      }
+
+      case "afterLike": {
+        // Decide whether to comment
+        if (followersState.shouldComment && state.commentsEnabled) {
+          followersState.phase = "commenting";
+          setStatus("Preparing to comment...");
+          const delay = mixedHumanDelay(state.commentDelayMin, state.commentDelayMax, 0.6);
+          schedule(applyFatigue(delay, state.actionsInSession));
+        } else {
+          // Close modal and move on
+          const dialog = document.querySelector('div[role="dialog"]');
+          const closeBtn = dialog?.querySelector('svg[aria-label="Close" i], button[aria-label="Close"]');
+          if (closeBtn) closeBtn.click();
+          else history.back();
+          followersState.postIndex++;
+          followersState.phase = "likingPost";
+          const P = getCurrentPersonality();
+          const delay = mixedHumanDelay(P.betweenLikes.fast, P.betweenLikes.slow, 0.7);
+          schedule(applyFatigue(delay, state.actionsInSession));
+        }
+        break;
+      }
+
+      case "commenting": {
+        const dialog = document.querySelector('div[role="dialog"]');
+        if (!dialog) {
+          setStatus("Post modal closed before comment");
+          followersState.postIndex++;
+          followersState.phase = "likingPost";
+          schedule(microPause());
+          break;
+        }
+
+        const emoji = getRandomEmoji();
+        setStatus(`Commenting: ${emoji}`);
+
+        const success = await typeComment(emoji);
+        if (success) {
+          state.commentCount += 1;
+          state.actionsInSession += 1;
+          save();
+          setStatus(`Commented ${state.commentCount} total`);
+          paint();
+        } else {
+          setStatus("Comment failed (input not found)");
+        }
+
+        // Post-comment pause
+        schedule(postActionPause());
+
+        // Close modal and move on
         const closeBtn = dialog.querySelector('svg[aria-label="Close" i], button[aria-label="Close"]');
         if (closeBtn) closeBtn.click();
-        else history.back(); // fallback
+        else history.back();
+
         followersState.postIndex++;
         followersState.phase = "likingPost";
-        schedule(randInt(state.delayBetweenLikesMin, state.delayBetweenLikesMax));
+        const P = getCurrentPersonality();
+        const delay = mixedHumanDelay(P.betweenLikes.fast, P.betweenLikes.slow, 0.7);
+        schedule(applyFatigue(delay, state.actionsInSession));
         break;
       }
 
       default:
-        setStatus("Followers: Unknown phase, stopping");
-        stopFollowers("Followers: Error");
-    }
-  }
-
-  /* --------------------------------------------------------------- Main step */
-
-  function step() {
-    timer = null;
-    if (!running) return;
-
-    // Run feed mode if enabled
-    if (state.feedEnabled) {
-      stepFeed();
-    }
-
-    // Run followers mode if enabled
-    if (state.followersEnabled) {
-      stepFollowers();
-    }
-
-    // If neither mode is running, stop
-    if (!state.feedEnabled && !state.followersEnabled) {
-      running = false;
-      clearTimeout(timer);
-      timer = null;
-      paint();
+        setStatus("Unknown phase, stopping");
+        stop("Error");
     }
   }
 
@@ -545,7 +828,7 @@
   const CSS = `
     :host { all: initial; }
     .card {
-      width: 300px; background: #15171b; color: #e9edf3;
+      width: 320px; background: #15171b; color: #e9edf3;
       border: 1px solid rgba(255,255,255,.09); border-radius: 14px;
       box-shadow: 0 14px 34px rgba(0,0,0,.38);
       font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
@@ -574,21 +857,21 @@
     }
     .primary:hover { filter: brightness(1.08); }
     .primary.stop { background: #e5484d; }
-    .primary:disabled { opacity: 0.5; cursor: not-allowed; }
     .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #c2cad6; }
     .row span.value { display: inline-flex; align-items: center; gap: 4px; color: #8e98a6; }
     input[type="number"] {
-      width: 56px; padding: 5px 6px; border-radius: 7px; text-align: right;
+      width: 60px; padding: 5px 6px; border-radius: 7px; text-align: right;
       border: 1px solid rgba(255,255,255,.13); background: #1d2026; color: #e9edf3;
       font: inherit; font-variant-numeric: tabular-nums;
     }
     input[type="number"]:focus { outline: 1px solid #3b82f6; }
-    input[type="text"], textarea {
+    input[type="text"], textarea, select {
       width: 100%; padding: 6px 8px; border-radius: 7px;
       border: 1px solid rgba(255,255,255,.13); background: #1d2026; color: #e9edf3;
       font: inherit; font-size: 12px; resize: vertical;
     }
-    input[type="text"]:focus, textarea:focus { outline: 1px solid #3b82f6; }
+    input[type="text"]:focus, textarea:focus, select:focus { outline: 1px solid #3b82f6; }
+    select { appearance: none; cursor: pointer; }
     input[type="checkbox"] { width: 15px; height: 15px; accent-color: #3b82f6; cursor: pointer; }
     .foot { display: flex; justify-content: space-between; align-items: center; color: #6f7885; font-size: 11px; }
     .link {
@@ -596,61 +879,56 @@
       font: inherit; font-size: 11px; cursor: pointer; text-decoration: underline;
     }
     .link:hover { color: #b7c1cd; }
-    .mode-toggle { display: flex; gap: 8px; margin-bottom: 4px; }
-    .mode-btn { flex: 1; padding: 6px; border: 1px solid rgba(255,255,255,.13); border-radius: 7px; background: #1d2026; color: #c2cad6; font: inherit; cursor: pointer; }
-    .mode-btn.active { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+    .emoji-preview { font-size: 14px; line-height: 1.5; min-height: 20px; }
+    .help { font-size: 10px; color: #6f7885; margin-top: 2px; }
+    .preset-btn { font-size: 11px; padding: 4px 8px; margin-right: 4px; }
   `;
 
   const root = document.createElement("div");
   root.id = "igal-host";
   root.style.cssText = "position:fixed;top:12px;right:12px;z-index:2147483647;";
   const shadow = root.attachShadow({ mode: "open" });
+
+  // Build personality options
+  const personalityOptions = Object.entries(PERSONALITIES).map(([key, p]) =>
+    `<option value="${key}" ${key === DEFAULT_PERSONALITY ? "selected" : ""}>${p.name}</option>`
+  ).join("");
+
   shadow.innerHTML = `
     <style>${CSS}</style>
     <div class="card">
       <button class="head" id="head" type="button">
         <span class="dot" id="dot"></span>
         <span class="name">ck-auto-like-instagram</span>
-        <span class="count" id="count">0/20</span>
+        <span class="count" id="count">❤️0 💬0</span>
         <span class="chev" id="chev">&#9662;</span>
       </button>
       <div class="body" id="body">
         <div class="status" id="status">Idle</div>
 
-        <div class="mode-toggle">
-          <button class="mode-btn" id="modeFeed" type="button">Feed Mode</button>
-          <button class="mode-btn" id="modeFollowers" type="button">Followers Mode</button>
-        </div>
-
-        <!-- Feed Mode Section -->
-        <div class="section" id="feedSection">
-          <div class="section-title">Feed Mode</div>
-          <button class="primary" id="feedToggle" type="button">Start Feed</button>
-          <div class="row">
-            <label for="feedMin">Min delay</label>
-            <span class="value"><input id="feedMin" type="number" min="0.5" max="120" step="0.5"> s</span>
-          </div>
-          <div class="row">
-            <label for="feedMax">Max delay</label>
-            <span class="value"><input id="feedMax" type="number" min="0.5" max="120" step="0.5"> s</span>
-          </div>
-          <div class="row">
-            <label for="feedLimit">Max likes</label>
-            <span class="value"><input id="feedLimit" type="number" min="1" max="500" step="1"></span>
-          </div>
-          <div class="row">
-            <label for="feedScroll">Auto-scroll feed</label>
-            <input id="feedScroll" type="checkbox">
+        <div class="section">
+          <div class="section-title">Personality Preset</div>
+          <div class="row" style="flex-direction:column;align-items:flex-start;gap:6px;">
+            <select id="personality">${personalityOptions}</select>
+            <div class="help" id="personalityDesc"></div>
+            <div style="display:flex;gap:4px;flex-wrap:wrap;">
+              <button class="primary preset-btn" id="presetCareful" type="button">Careful</button>
+              <button class="primary preset-btn" id="presetCasual" type="button">Casual</button>
+              <button class="primary preset-btn" id="presetEfficient" type="button">Efficient</button>
+            </div>
           </div>
         </div>
 
-        <!-- Followers Mode Section -->
-        <div class="section" id="followersSection">
-          <div class="section-title">Followers Mode</div>
+        <div class="section">
+          <div class="section-title">Target Profiles</div>
           <div class="row" style="flex-direction:column;align-items:flex-start;gap:4px;">
-            <label for="targets">Target profiles (one per line, @ optional)</label>
+            <label for="targets">Profiles (one per line, @ optional)</label>
             <textarea id="targets" rows="3" placeholder="profile1&#10;profile2&#10;profile3"></textarea>
           </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Limits</div>
           <div class="row">
             <label for="maxFollowers">Max followers/profile</label>
             <span class="value"><input id="maxFollowers" type="number" min="1" max="500" step="1"></span>
@@ -659,35 +937,97 @@
             <label for="maxLikesPerFollower">Max likes/follower</label>
             <span class="value"><input id="maxLikesPerFollower" type="number" min="1" max="50" step="1"></span>
           </div>
-          <div class="row">
-            <label for="delayFollowersMin">Delay followers min (s)</label>
-            <span class="value"><input id="delayFollowersMin" type="number" min="1" max="600" step="1"></span>
-          </div>
-          <div class="row">
-            <label for="delayFollowersMax">Delay followers max (s)</label>
-            <span class="value"><input id="delayFollowersMax" type="number" min="1" max="600" step="1"></span>
-          </div>
-          <div class="row">
-            <label for="delayLikesMin">Delay likes min (s)</label>
-            <span class="value"><input id="delayLikesMin" type="number" min="1" max="600" step="1"></span>
-          </div>
-          <div class="row">
-            <label for="delayLikesMax">Delay likes max (s)</label>
-            <span class="value"><input id="delayLikesMax" type="number" min="1" max="600" step="1"></span>
-          </div>
-          <div class="row">
-            <label for="delayProfilesMin">Delay profiles min (s)</label>
-            <span class="value"><input id="delayProfilesMin" type="number" min="1" max="600" step="1"></span>
-          </div>
-          <div class="row">
-            <label for="delayProfilesMax">Delay profiles max (s)</label>
-            <span class="value"><input id="delayProfilesMax" type="number" min="1" max="600" step="1"></span>
-          </div>
-          <button class="primary" id="followersToggle" type="button">Start Followers</button>
         </div>
 
+        <div class="section">
+          <div class="section-title">Human-Like Delays (medians in seconds)</div>
+          <div class="help">Uses log-normal distribution with fast/slow modes. Actual delays vary naturally.</div>
+          <div class="row">
+            <label for="delayFollowersFast">Between followers (fast)</label>
+            <span class="value"><input id="delayFollowersFast" type="number" min="3" max="120" step="1"></span>
+          </div>
+          <div class="row">
+            <label for="delayFollowersSlow">Between followers (slow/distracted)</label>
+            <span class="value"><input id="delayFollowersSlow" type="number" min="3" max="300" step="1"></span>
+          </div>
+          <div class="row">
+            <label for="delayLikesFast">Between likes (fast)</label>
+            <span class="value"><input id="delayLikesFast" type="number" min="2" max="60" step="1"></span>
+          </div>
+          <div class="row">
+            <label for="delayLikesSlow">Between likes (slow/distracted)</label>
+            <span class="value"><input id="delayLikesSlow" type="number" min="2" max="120" step="1"></span>
+          </div>
+          <div class="row">
+            <label for="delayProfilesFast">Between profiles (fast)</label>
+            <span class="value"><input id="delayProfilesFast" type="number" min="10" max="300" step="1"></span>
+          </div>
+          <div class="row">
+            <label for="delayProfilesSlow">Between profiles (slow/distracted)</label>
+            <span class="value"><input id="delayProfilesSlow" type="number" min="10" max="600" step="1"></span>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Session Breaks (fatigue simulation)</div>
+          <div class="row">
+            <label for="sessionBreakEvery">Break every N actions</label>
+            <span class="value"><input id="sessionBreakEvery" type="number" min="5" max="100" step="1"></span>
+          </div>
+          <div class="row">
+            <label for="sessionBreakMin">Break duration min (s)</label>
+            <span class="value"><input id="sessionBreakMin" type="number" min="10" max="600" step="10"></span>
+          </div>
+          <div class="row">
+            <label for="sessionBreakMax">Break duration max (s)</label>
+            <span class="value"><input id="sessionBreakMax" type="number" min="10" max="1200" step="10"></span>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Content Interaction</div>
+          <div class="row">
+            <label for="watchVideoProbability">Watch videos (%)</label>
+            <span class="value"><input id="watchVideoProbability" type="number" min="0" max="100" step="5"></span>
+          </div>
+          <div class="row">
+            <label for="readCaptionProbability">Read captions (%)</label>
+            <span class="value"><input id="readCaptionProbability" type="number" min="0" max="100" step="5"></span>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Comments (Optional)</div>
+          <div class="row">
+            <label for="commentsEnabled">Enable comments</label>
+            <input id="commentsEnabled" type="checkbox">
+          </div>
+          <div class="row" style="flex-direction:column;align-items:flex-start;gap:4px;">
+            <label for="commentEmojis">Emojis (space separated)</label>
+            <input id="commentEmojis" type="text" placeholder="❤️ 🔥 😍 👏 ...">
+          </div>
+          <div class="row">
+            <label for="commentProbability">Comment probability (%)</label>
+            <span class="value"><input id="commentProbability" type="number" min="0" max="100" step="1"></span>
+          </div>
+          <div class="row">
+            <label for="commentDelayMin">Before comment min (s)</label>
+            <span class="value"><input id="commentDelayMin" type="number" min="1" max="60" step="1"></span>
+          </div>
+          <div class="row">
+            <label for="commentDelayMax">Before comment max (s)</label>
+            <span class="value"><input id="commentDelayMax" type="number" min="1" max="60" step="1"></span>
+          </div>
+          <div class="row">
+            <span>Preview:</span>
+            <span class="emoji-preview value" id="emojiPreview"></span>
+          </div>
+        </div>
+
+        <button class="primary" id="toggle" type="button">Start</button>
+
         <div class="foot">
-          <span id="hint">Shared liked-photo memory across modes</span>
+          <span id="hint">Liked-photo memory persists across sessions</span>
           <button class="link" id="reset" type="button">Reset All</button>
         </div>
       </div>
@@ -696,56 +1036,92 @@
 
   const el = {};
   const ids = ["head","body","chev","dot","count","status",
-    "modeFeed","modeFollowers",
-    "feedSection","followersSection",
-    "feedToggle","feedMin","feedMax","feedLimit","feedScroll",
+    "personality","personalityDesc",
+    "presetCareful","presetCasual","presetEfficient",
     "targets","maxFollowers","maxLikesPerFollower",
-    "delayFollowersMin","delayFollowersMax","delayLikesMin","delayLikesMax",
-    "delayProfilesMin","delayProfilesMax","followersToggle",
-    "reset","hint"];
+    "delayFollowersFast","delayFollowersSlow","delayLikesFast","delayLikesSlow",
+    "delayProfilesFast","delayProfilesSlow",
+    "sessionBreakEvery","sessionBreakMin","sessionBreakMax",
+    "watchVideoProbability","readCaptionProbability",
+    "commentsEnabled","commentEmojis","commentProbability","commentDelayMin","commentDelayMax",
+    "emojiPreview","toggle","reset","hint"];
   ids.forEach(id => { el[id] = shadow.getElementById(id); });
 
   let collapsed = false;
-  let activeMode = "feed"; // "feed" | "followers"
+
+  const PERSONALITY_DESCRIPTIONS = {
+    careful: "Slow, reads captions, watches videos, low action volume. Safest for main accounts.",
+    casual: "Natural pace, sometimes reads, sometimes skims. Good balance for secondary accounts.",
+    efficient: "Faster pace, skims content, higher volume. Higher risk, use with burner accounts only."
+  };
 
   function paint() {
-    const feedRunning = state.feedEnabled && running;
-    const followersRunning = state.followersEnabled && running;
-    const anyRunning = feedRunning || followersRunning;
-
-    el.count.textContent = state.likeCount + "/" + (state.feedEnabled ? state.feedMaxLikes : (state.followersEnabled ? "∞" : state.feedMaxLikes));
-    el.dot.classList.toggle("on", anyRunning);
-
-    // Mode buttons
-    el.modeFeed.classList.toggle("active", activeMode === "feed");
-    el.modeFollowers.classList.toggle("active", activeMode === "followers");
-    el.feedSection.hidden = activeMode !== "feed";
-    el.followersSection.hidden = activeMode !== "followers";
-
-    // Feed controls
-    el.feedToggle.textContent = feedRunning ? "Stop Feed" : "Start Feed";
-    el.feedToggle.classList.toggle("stop", feedRunning);
-    el.feedToggle.disabled = followersRunning;
-    if (shadow.activeElement !== el.feedMin) el.feedMin.value = (state.feedMinDelay / 1000).toFixed(1);
-    if (shadow.activeElement !== el.feedMax) el.feedMax.value = (state.feedMaxDelay / 1000).toFixed(1);
-    if (shadow.activeElement !== el.feedLimit) el.feedLimit.value = String(state.feedMaxLikes);
-    el.feedScroll.checked = state.feedAutoScroll;
-
-    // Followers controls
-    el.followersToggle.textContent = followersRunning ? "Stop Followers" : "Start Followers";
-    el.followersToggle.classList.toggle("stop", followersRunning);
-    el.followersToggle.disabled = feedRunning;
+    const isRunning = state.enabled && running;
+    el.count.textContent = `❤️${state.likeCount} 💬${state.commentCount}`;
+    el.dot.classList.toggle("on", isRunning);
+    el.toggle.textContent = isRunning ? "Stop" : "Start";
+    el.toggle.classList.toggle("stop", isRunning);
     el.targets.value = state.targets.join("\n");
     if (shadow.activeElement !== el.maxFollowers) el.maxFollowers.value = String(state.maxFollowersPerProfile);
     if (shadow.activeElement !== el.maxLikesPerFollower) el.maxLikesPerFollower.value = String(state.maxLikesPerFollower);
-    if (shadow.activeElement !== el.delayFollowersMin) el.delayFollowersMin.value = String(state.delayBetweenFollowersMin / 1000);
-    if (shadow.activeElement !== el.delayFollowersMax) el.delayFollowersMax.value = String(state.delayBetweenFollowersMax / 1000);
-    if (shadow.activeElement !== el.delayLikesMin) el.delayLikesMin.value = String(state.delayBetweenLikesMin / 1000);
-    if (shadow.activeElement !== el.delayLikesMax) el.delayLikesMax.value = String(state.delayBetweenLikesMax / 1000);
-    if (shadow.activeElement !== el.delayProfilesMin) el.delayProfilesMin.value = String(state.delayBetweenProfilesMin / 1000);
-    if (shadow.activeElement !== el.delayProfilesMax) el.delayProfilesMax.value = String(state.delayBetweenProfilesMax / 1000);
+
+    // Personality
+    el.personality.value = state.personality;
+    el.personalityDesc.textContent = PERSONALITY_DESCRIPTIONS[state.personality] || "";
+
+    // Delays (show in seconds)
+    if (shadow.activeElement !== el.delayFollowersFast) el.delayFollowersFast.value = String(state.delayBetweenFollowersFast / 1000);
+    if (shadow.activeElement !== el.delayFollowersSlow) el.delayFollowersSlow.value = String(state.delayBetweenFollowersSlow / 1000);
+    if (shadow.activeElement !== el.delayLikesFast) el.delayLikesFast.value = String(state.delayBetweenLikesFast / 1000);
+    if (shadow.activeElement !== el.delayLikesSlow) el.delayLikesSlow.value = String(state.delayBetweenLikesSlow / 1000);
+    if (shadow.activeElement !== el.delayProfilesFast) el.delayProfilesFast.value = String(state.delayBetweenProfilesFast / 1000);
+    if (shadow.activeElement !== el.delayProfilesSlow) el.delayProfilesSlow.value = String(state.delayBetweenProfilesSlow / 1000);
+
+    // Session breaks
+    if (shadow.activeElement !== el.sessionBreakEvery) el.sessionBreakEvery.value = String(state.sessionBreakEvery);
+    if (shadow.activeElement !== el.sessionBreakMin) el.sessionBreakMin.value = String(state.sessionBreakMin / 1000);
+    if (shadow.activeElement !== el.sessionBreakMax) el.sessionBreakMax.value = String(state.sessionBreakMax / 1000);
+
+    // Content interaction
+    if (shadow.activeElement !== el.watchVideoProbability) el.watchVideoProbability.value = String(Math.round(state.watchVideoProbability * 100));
+    if (shadow.activeElement !== el.readCaptionProbability) el.readCaptionProbability.value = String(Math.round(state.readCaptionProbability * 100));
+
+    // Comments
+    el.commentsEnabled.checked = state.commentsEnabled;
+    if (shadow.activeElement !== el.commentEmojis) el.commentEmojis.value = state.commentEmojis;
+    if (shadow.activeElement !== el.commentProbability) el.commentProbability.value = String(state.commentProbability);
+    if (shadow.activeElement !== el.commentDelayMin) el.commentDelayMin.value = String(state.commentDelayMin / 1000);
+    if (shadow.activeElement !== el.commentDelayMax) el.commentDelayMax.value = String(state.commentDelayMax / 1000);
+    updateEmojiPreview();
 
     el.status.textContent = statusText;
+  }
+
+  function updateEmojiPreview() {
+    const emojis = (el.commentEmojis.value || state.commentEmojis).trim().split(/\s+/).filter(Boolean);
+    el.emojiPreview.textContent = emojis.slice(0, 10).join(" ") + (emojis.length > 10 ? " …" : "");
+  }
+
+  function applyPersonality(key) {
+    if (!PERSONALITIES[key]) return;
+    const P = PERSONALITIES[key];
+    commit({
+      personality: key,
+      maxFollowersPerProfile: P.maxFollowersPerProfile,
+      maxLikesPerFollower: P.maxLikesPerFollower,
+      delayBetweenFollowersFast: P.betweenFollowers.fast,
+      delayBetweenFollowersSlow: P.betweenFollowers.slow,
+      delayBetweenLikesFast: P.betweenLikes.fast,
+      delayBetweenLikesSlow: P.betweenLikes.slow,
+      delayBetweenProfilesFast: P.betweenProfiles.fast,
+      delayBetweenProfilesSlow: P.betweenProfiles.slow,
+      commentProbability: P.commentProbability,
+      watchVideoProbability: P.watchVideoProbability,
+      readCaptionProbability: P.readCaptionProbability,
+      sessionBreakEvery: P.sessionBreakEvery,
+      sessionBreakMin: P.sessionBreakDuration.min,
+      sessionBreakMax: P.sessionBreakDuration.max,
+    });
   }
 
   function commit(patch) {
@@ -789,57 +1165,61 @@
     el.chev.innerHTML = collapsed ? "&#9656;" : "&#9662;";
   });
 
-  // Mode switching
-  el.modeFeed.addEventListener("click", () => { activeMode = "feed"; paint(); });
-  el.modeFollowers.addEventListener("click", () => { activeMode = "followers"; paint(); });
+  // Personality preset buttons
+  el.presetCareful.addEventListener("click", () => applyPersonality("careful"));
+  el.presetCasual.addEventListener("click", () => applyPersonality("casual"));
+  el.presetEfficient.addEventListener("click", () => applyPersonality("efficient"));
 
-  // Feed events
-  el.feedToggle.addEventListener("click", () => {
-    if (state.feedEnabled) { stopFeed("Feed: Stopped"); return; }
-    if (state.followersEnabled) { setStatus("Stop Followers mode first"); return; }
-    if (!isInstagramHost()) { setStatus("Open instagram.com first"); return; }
-    if (state.likeCount >= state.feedMaxLikes) { setStatus("Feed: Limit reached - raise max or reset"); return; }
-    claimAndStartFeed();
-  });
-  el.feedMin.addEventListener("change", () => {
-    const sec = clamp(el.feedMin.value, 0.5, 120, state.feedMinDelay / 1000);
-    commit({ feedMinDelay: Math.round(sec * 1000) });
-  });
-  el.feedMax.addEventListener("change", () => {
-    const sec = clamp(el.feedMax.value, 0.5, 120, state.feedMaxDelay / 1000);
-    commit({ feedMaxDelay: Math.round(sec * 1000) });
-  });
-  el.feedLimit.addEventListener("change", () => {
-    commit({ feedMaxLikes: Math.round(clamp(el.feedLimit.value, 1, 500, state.feedMaxLikes)) });
-  });
-  el.feedScroll.addEventListener("change", () => commit({ feedAutoScroll: el.feedScroll.checked }));
+  // Personality select
+  el.personality.addEventListener("change", () => applyPersonality(el.personality.value));
 
-  // Followers events
-  el.followersToggle.addEventListener("click", () => {
-    if (state.followersEnabled) { stopFollowers("Followers: Stopped"); return; }
-    if (state.feedEnabled) { setStatus("Stop Feed mode first"); return; }
+  // Toggle
+  el.toggle.addEventListener("click", () => {
+    if (state.enabled) { stop("Stopped"); return; }
     if (!isInstagramHost()) { setStatus("Open instagram.com first"); return; }
-    if (!el.targets.value.trim()) { setStatus("Followers: Add at least one target profile"); return; }
+    if (!el.targets.value.trim()) { setStatus("Add at least one target profile"); return; }
     const targets = el.targets.value.split("\n").map(t => t.trim().replace(/^@/, "")).filter(Boolean);
-    commit({ targets, followersEnabled: true });
-    claimAndStartFollowers();
+    commit({ targets, enabled: true });
+    claimAndStart();
   });
+
   el.targets.addEventListener("change", () => {
     const targets = el.targets.value.split("\n").map(t => t.trim().replace(/^@/, "")).filter(Boolean);
     commit({ targets });
   });
   el.maxFollowers.addEventListener("change", () => commit({ maxFollowersPerProfile: Math.round(clamp(el.maxFollowers.value, 1, 500, state.maxFollowersPerProfile)) }));
   el.maxLikesPerFollower.addEventListener("change", () => commit({ maxLikesPerFollower: Math.round(clamp(el.maxLikesPerFollower.value, 1, 50, state.maxLikesPerFollower)) }));
-  el.delayFollowersMin.addEventListener("change", () => commit({ delayBetweenFollowersMin: Math.round(clamp(el.delayFollowersMin.value, 1, 3600, state.delayBetweenFollowersMin / 1000)) * 1000 }));
-  el.delayFollowersMax.addEventListener("change", () => commit({ delayBetweenFollowersMax: Math.round(clamp(el.delayFollowersMax.value, 1, 3600, state.delayBetweenFollowersMax / 1000)) * 1000 }));
-  el.delayLikesMin.addEventListener("change", () => commit({ delayBetweenLikesMin: Math.round(clamp(el.delayLikesMin.value, 1, 3600, state.delayBetweenLikesMin / 1000)) * 1000 }));
-  el.delayLikesMax.addEventListener("change", () => commit({ delayBetweenLikesMax: Math.round(clamp(el.delayLikesMax.value, 1, 3600, state.delayBetweenLikesMax / 1000)) * 1000 }));
-  el.delayProfilesMin.addEventListener("change", () => commit({ delayBetweenProfilesMin: Math.round(clamp(el.delayProfilesMin.value, 1, 3600, state.delayBetweenProfilesMin / 1000)) * 1000 }));
-  el.delayProfilesMax.addEventListener("change", () => commit({ delayBetweenProfilesMax: Math.round(clamp(el.delayProfilesMax.value, 1, 3600, state.delayBetweenProfilesMax / 1000)) * 1000 }));
+
+  // Delays (input in seconds, store as ms)
+  el.delayFollowersFast.addEventListener("change", () => commit({ delayBetweenFollowersFast: Math.round(clamp(el.delayFollowersFast.value, 3, 120, state.delayBetweenFollowersFast / 1000)) * 1000 }));
+  el.delayFollowersSlow.addEventListener("change", () => commit({ delayBetweenFollowersSlow: Math.round(clamp(el.delayFollowersSlow.value, 3, 300, state.delayBetweenFollowersSlow / 1000)) * 1000 }));
+  el.delayLikesFast.addEventListener("change", () => commit({ delayBetweenLikesFast: Math.round(clamp(el.delayLikesFast.value, 2, 60, state.delayBetweenLikesFast / 1000)) * 1000 }));
+  el.delayLikesSlow.addEventListener("change", () => commit({ delayBetweenLikesSlow: Math.round(clamp(el.delayLikesSlow.value, 2, 120, state.delayBetweenLikesSlow / 1000)) * 1000 }));
+  el.delayProfilesFast.addEventListener("change", () => commit({ delayBetweenProfilesFast: Math.round(clamp(el.delayProfilesFast.value, 10, 300, state.delayBetweenProfilesFast / 1000)) * 1000 }));
+  el.delayProfilesSlow.addEventListener("change", () => commit({ delayBetweenProfilesSlow: Math.round(clamp(el.delayProfilesSlow.value, 10, 600, state.delayBetweenProfilesSlow / 1000)) * 1000 }));
+
+  // Session breaks
+  el.sessionBreakEvery.addEventListener("change", () => commit({ sessionBreakEvery: Math.round(clamp(el.sessionBreakEvery.value, 5, 100, state.sessionBreakEvery)) }));
+  el.sessionBreakMin.addEventListener("change", () => commit({ sessionBreakMin: Math.round(clamp(el.sessionBreakMin.value, 10, 600, state.sessionBreakMin / 1000)) * 1000 }));
+  el.sessionBreakMax.addEventListener("change", () => commit({ sessionBreakMax: Math.round(clamp(el.sessionBreakMax.value, 10, 1200, state.sessionBreakMax / 1000)) * 1000 }));
+
+  // Content interaction
+  el.watchVideoProbability.addEventListener("change", () => commit({ watchVideoProbability: clamp(el.watchVideoProbability.value / 100, 0, 1, state.watchVideoProbability) }));
+  el.readCaptionProbability.addEventListener("change", () => commit({ readCaptionProbability: clamp(el.readCaptionProbability.value / 100, 0, 1, state.readCaptionProbability) }));
+
+  // Comments
+  el.commentsEnabled.addEventListener("change", () => commit({ commentsEnabled: el.commentsEnabled.checked }));
+  el.commentEmojis.addEventListener("input", () => {
+    commit({ commentEmojis: el.commentEmojis.value });
+    updateEmojiPreview();
+  });
+  el.commentProbability.addEventListener("change", () => commit({ commentProbability: Math.round(clamp(el.commentProbability.value, 0, 100, state.commentProbability)) }));
+  el.commentDelayMin.addEventListener("change", () => commit({ commentDelayMin: Math.round(clamp(el.commentDelayMin.value, 1, 60, state.commentDelayMin / 1000)) * 1000 }));
+  el.commentDelayMax.addEventListener("change", () => commit({ commentDelayMax: Math.round(clamp(el.commentDelayMax.value, 1, 60, state.commentDelayMax / 1000)) * 1000 }));
 
   el.reset.addEventListener("click", () => {
     clicked = new Set();
-    commit({ likeCount: 0, likedCodes: [], feedEnabled: false, followersEnabled: false });
+    commit({ likeCount: 0, commentCount: 0, likedCodes: [], enabled: false, actionsInSession: 0, lastSessionBreak: 0 });
     setStatus("All counters reset");
   });
 
@@ -858,26 +1238,20 @@
     state = normalize(changes[KEY].newValue);
     clicked = new Set(state.likedCodes);
 
-    if (state.feedEnabled && (!state.owner || state.owner === TAB_ID)) {
-      if (!state.feedEnabled) claimAndStartFeed(); // actually this checks old value
-    } else if (state.feedEnabled) {
-      // Disabled from popup or another tab took over
-      if (running && state.feedEnabled) { /* keep running */ }
+    if (state.enabled && (!state.owner || state.owner === TAB_ID)) {
+      if (!running) claimAndStart();
+    } else if (running) {
+      running = false;
+      clearTimeout(timer);
+      timer = null;
+      setStatus(state.enabled ? "Handed off to another tab" : "Stopped");
     }
-
-    if (state.followersEnabled && (!state.owner || state.owner === TAB_ID)) {
-      if (!state.followersEnabled) claimAndStartFollowers();
-    } else if (state.followersEnabled) {
-      // Disabled from popup or another tab took over
-    }
-
     paint();
   });
 
   window.addEventListener("pagehide", () => {
     if (running && state.owner === TAB_ID) {
-      state.feedEnabled = false;
-      state.followersEnabled = false;
+      state.enabled = false;
       state.owner = "";
       chrome.storage.local.set({ [KEY]: normalize(state) });
     }

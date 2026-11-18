@@ -1,11 +1,6 @@
 # ck-auto-like-instagram
 
-A Manifest V3 Chrome extension with **two modes**:
-
-1. **Feed Mode** — likes posts in your home feed (original behavior)
-2. **Followers Mode** — goes to target profiles → their followers → likes N recent posts per follower
-
-Both modes share the same **liked-photo memory** so a post is never liked twice, even across modes.
+A Manifest V3 Chrome extension that **likes posts from followers of target Instagram profiles** you specify, with **human-like behavior simulation** to minimize detection risk.
 
 ## Install
 
@@ -14,79 +9,128 @@ Both modes share the same **liked-photo memory** so a post is never liked twice,
 3. Click **Load unpacked** and pick this folder
 4. Open (or reload) `https://www.instagram.com/` — a small **ck-auto-like-instagram** panel appears in the top-right corner
 
-## Use
+## How It Works
 
-### Feed Mode (original)
-- Press **Start Feed** in the on-page panel or toolbar popup
-- **Min/Max delay** — random wait between likes (default 3–8 s)
-- **Max likes** — stops automatically at this number (default 20)
-- **Auto-scroll feed** — scrolls down when no unliked post is visible
-- **Reset All** clears the counter and the remembered post list
+1. You provide a list of **target profiles** (one username per line)
+2. For each target, the extension:
+   - Opens their `/followers/` modal
+   - Collects up to `maxFollowersPerProfile` followers
+   - For each follower: opens their profile → likes up to `maxLikesPerFollower` recent posts
+3. **Never likes the same post twice** — shared `likedCodes` memory persists across browser restarts
+4. **Optional comments** with random emojis at configurable probability
 
-### Followers Mode (new)
-1. Switch to **Followers** tab in the popup
-2. Enter **target profiles** (one per line, `@` optional) — e.g.:
-   ```
-   natgeo
-   nasa
-   natgeotravel
-   ```
-3. Configure:
-   - **Max followers/profile** — how many followers to process per target (default 20)
-   - **Max likes/follower** — how many recent posts to like per follower (default 3)
-   - **Delay followers min/max** — wait between each follower (default 10–20 s)
-   - **Delay likes min/max** — wait between each like (default 5–10 s)
-   - **Delay profiles min/max** — wait before moving to next target profile (default 30–60 s)
-4. Press **Start Followers**
+## Personality Presets (Recommended)
 
-The extension will:
-1. Go to each target's `/followers/` page
-2. Collect up to `maxFollowersPerProfile` followers
-3. For each follower: open their profile → like up to `maxLikesPerFollower` recent posts (that haven't been liked before)
-4. Move to next follower → next target profile
+Choose a preset that matches your risk tolerance:
 
-**Only one mode runs at a time.** Stop one before starting the other.
+| Preset | Speed | Volume | Reading | Comments | Best For |
+|--------|-------|--------|---------|----------|----------|
+| **Careful Observer** | Slow (25-60s between followers) | Low (8 followers, 2 likes) | Reads 90%, watches 80% | 15% | **Main accounts** — safest |
+| **Casual Browser** | Natural (15-35s) | Medium (12 followers, 3 likes) | Reads 60%, watches 50% | 35% | **Secondary accounts** — balanced |
+| **Efficient Scroller** | Fast (8-18s) | High (20 followers, 4 likes) | Skims 70% | 20% | **Burner accounts only** — higher risk |
 
-## How it works
+> **Start with "Careful Observer"**. Only move to "Casual" after weeks with no action blocks. Never use "Efficient" on an account you value.
 
-- Finds the post Like button (`svg[aria-label="Like"]`, ≥18 px — avoids tiny comment-like icons)
-- Identifies a post by its shortcode (`/p/…`, `/reel/…`, `/tv/…`)
-- **Shared `likedCodes` storage** — a post liked in Feed mode will not be re-liked in Followers mode, and vice versa, even after browser restart
-- Pauses while you type in a comment box
-- Won't scroll while a post modal is open (Feed mode)
-- Only one tab runs at a time; starting in a second tab hands off the run
-- Settings live in `chrome.storage.local`, shared by panel and popup
-- Detects "Action Blocked" / "Try Again Later" and stops automatically for safety
+## Human-Like Delay Engine
 
-## Limitations
+The extension **does not use uniform random delays**. Instead:
 
-- Feed mode: works on home feed, post pages and post modals. Reels, Stories, Explore grid not targeted.
-- Followers mode: depends on Instagram's follower modal and profile page markup. If selectors change, collection may stop.
-- Both modes: depend on `aria-label="Like"`. If Instagram changes this, `pickLikeButton` needs updating.
-- **Not a growth bot** — personal convenience tool only.
+- **Log-normal distribution** — clusters around a "comfortable" median with long tails (like real human reaction times)
+- **Mixture model** — 70% "in flow" (fast), 30% "distracted" (slow) — mimics attention shifts
+- **Reading simulation** — pauses to read captions (~3 chars/sec) and watch videos before liking
+- **Micro-pauses** — 200-2000ms hesitation before each action
+- **Post-action satisfaction pause** — 300-3000ms after like/comment
+- **Session fatigue** — each action adds ~2% delay, capping at 2x (humans slow down when tired)
+- **Session breaks** — configurable long breaks (1-5 min) every N actions
 
-## Local test harness
+## Configuration
 
-`tests/harness.html` is a fake feed (three posts, a comment-like icon) plus a minimal `chrome.storage` shim, so the click loop can be exercised without touching Instagram:
+All settings in the popup panel:
+
+### Target Profiles
+- One username per line, `@` optional
+- Example: `natgeo`, `nasa`, `natgeotravel`
+
+### Limits
+- **Max followers/profile** — how many followers to process per target
+- **Max likes/follower** — how many recent posts to like per follower
+
+### Human-Like Delays (medians in seconds)
+| Setting | What it controls |
+|---------|------------------|
+| Between followers (fast) | Median delay when "in flow" |
+| Between followers (slow) | Median delay when "distracted" |
+| Between likes (fast) | Median delay between likes in flow |
+| Between likes (slow) | Median delay between likes distracted |
+| Between profiles (fast) | Median delay between target profiles |
+| Between profiles (slow) | Median delay between profiles distracted |
+
+> **Actual delays vary naturally** — the engine samples from log-normal distributions around these medians.
+
+### Session Breaks (Fatigue Simulation)
+- **Break every N actions** — long pause after this many likes+comments
+- **Break duration min/max** — random duration in range
+
+### Content Interaction
+- **Watch videos (%)** — probability of watching Reels before liking
+- **Read captions (%)** — probability of reading caption before liking
+
+### Comments (Optional)
+- **Enable comments** — toggle
+- **Emojis** — space-separated list (default: 20 emojis)
+- **Comment probability (%)** — chance to comment after each like
+- **Before comment min/max (s)** — extra delay before typing comment
+
+## Safety Features
+
+- **Action Block detection** — stops immediately if "Action Blocked", "Try Again Later", "Challenge Required" detected
+- **Single-tab enforcement** — only one tab runs at a time
+- **Shared liked-photo memory** — `likedCodes` in `chrome.storage.local` survives restarts
+- **Keyboard/type simulation** — comments typed character-by-character with human timing
+- **Modal handling** — properly closes post modals, doesn't scroll behind them
+
+## Local Test Harness
+
+Test without Instagram:
+
+```bash
+node tests/serve.js 8123
+# open http://127.0.0.1:8123/
+```
+
+Click **Start** / **Stop** / **Reset** buttons on the page. Select a personality to see delay differences.
+
+## Heads-Up
+
+> ⚠️ **Automating likes/comments violates Instagram's Terms of Use** and can get accounts rate-limited, action-blocked, or permanently banned.
+>
+> **Follow these rules to minimize risk:**
+> 1. Use **"Careful Observer"** preset for any account you care about
+> 2. **Secondary/burner accounts only** for "Casual" or "Efficient"
+> 3. **Max 50-100 actions/day** per account (likes + comments)
+> 4. **Run during human hours** (8am-11pm local), not 24/7
+> 5. **Watch for warnings** — "Action Blocked" = stop immediately, wait 24-48h
+> 6. **Don't combine** with other automation tools
+> 7. **Real engagement matters** — manually like/comment/post sometimes
+>
+> **Use at your own risk.** The author is not responsible for banned accounts.
+
+## Files
 
 ```
-node tests/serve.js
-# open http://127.0.0.1:8123/tests/harness.html
+├── manifest.json          (v3.0.0)
+├── content.js             (human-like delay engine + followers logic)
+├── popup.html             (settings UI)
+├── popup.js               (popup controller)
+├── popup.css              (styles)
+├── README.md              (this file)
+└── tests/
+    ├── harness.html       (off-site test page)
+    └── serve.js           (local static server)
 ```
 
-The page sets `window.__igalTestMode`, the only seam in `content.js` that lets the host check pass off-site. Nothing else differs from the real run.
+## Version History
 
-## Heads-up
-
-> ⚠️ **Automating likes may go against Instagram's Terms of Use** and can get an account rate-limited, action-blocked, or permanently restricted.
->
-> **Followers mode is especially risky** — it performs many automated actions in sequence (navigate → scroll → click → like → close).
->
-> **Recommended safe defaults:**
-> - Feed mode: delay 10–20 s, max 20–30 likes/session
-> - Followers mode: max 10 followers/profile, max 2 likes/follower, delays ≥30 s between followers, ≥60 s between profiles
-> - Use a **secondary/burner account**
-> - Run during human hours, not 24/7
-> - Watch for "Action Blocked" warnings — stop immediately if they appear
->
-> Use at your own risk.
+- **v3.0** — Human-like delay engine, personality presets, session fatigue, reading simulation, micro-pauses
+- **v2.0** — Followers mode, multi-target, comments with emojis, shared liked-photo memory
+- **v1.0** — Original feed mode only

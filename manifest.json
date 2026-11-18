@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "ck-auto-like-instagram",
-  "version": "2.0.0",
-  "description": "Likes posts in your Instagram feed or followers' posts of target profiles, at a human pace with configurable delays and limits.",
+  "version": "3.0.0",
+  "description": "Likes posts from followers of target Instagram profiles you specify, at a human pace with configurable delays and limits.",
   "permissions": ["storage", "scripting", "tabs"],
   "host_permissions": ["https://www.instagram.com/*"],
   "action": {

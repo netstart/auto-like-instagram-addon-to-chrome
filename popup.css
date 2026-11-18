@@ -7,7 +7,7 @@
 }
 
 body {
-  width: 320px;
+  width: 340px;
   margin: 0;
   padding: 14px;
   background: #15171b;
@@ -55,34 +55,30 @@ h1 {
   min-height: 17px;
 }
 
-.mode-toggle {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 10px;
+.section {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.mode-btn {
-  flex: 1;
-  padding: 7px 10px;
-  border: 1px solid rgba(255,255,255,.13);
-  border-radius: 8px;
-  background: #1d2026;
+.section:last-of-type {
+  border-bottom: none;
+  margin-bottom: 8px;
+  padding-bottom: 0;
+}
+
+.section-title {
+  font-weight: 600;
   color: #c2cad6;
-  font: inherit;
   font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s;
+  margin-bottom: 8px;
 }
 
-.mode-btn:hover {
-  background: #252930;
-}
-
-.mode-btn.active {
-  background: #3b82f6;
-  color: #fff;
-  border-color: #3b82f6;
+.help {
+  font-size: 10px;
+  color: #6f7885;
+  margin: 4px 0 8px;
+  line-height: 1.4;
 }
 
 .primary {
@@ -110,12 +106,35 @@ h1 {
   cursor: not-allowed;
 }
 
+.preset-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.preset-btn {
+  font-size: 11px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  background: #1d2026;
+  border: 1px solid rgba(255,255,255,.13);
+  color: #c2cad6;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.preset-btn:hover {
+  background: #252930;
+  border-color: #3b82f6;
+}
+
 .grid {
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: center;
   gap: 9px;
-  margin: 14px 0;
+  margin: 8px 0;
   color: #c2cad6;
 }
 
@@ -131,7 +150,7 @@ h1 {
 }
 
 input[type="number"] {
-  width: 56px;
+  width: 60px;
   padding: 5px 6px;
   border: 1px solid rgba(255, 255, 255, 0.13);
   border-radius: 7px;
@@ -147,7 +166,8 @@ input[type="number"]:focus {
 }
 
 input[type="text"],
-textarea {
+textarea,
+select {
   width: 100%;
   padding: 6px 8px;
   border: 1px solid rgba(255, 255, 255, 0.13);
@@ -159,7 +179,8 @@ textarea {
 }
 
 input[type="text"]:focus,
-textarea:focus {
+textarea:focus,
+select:focus {
   outline: 1px solid #3b82f6;
 }
 
@@ -168,12 +189,24 @@ textarea {
   min-height: 70px;
 }
 
+select {
+  appearance: none;
+  cursor: pointer;
+}
+
 input[type="checkbox"] {
   width: 15px;
   height: 15px;
   margin: 0;
   accent-color: #3b82f6;
   cursor: pointer;
+}
+
+.emoji-preview {
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 20px;
+  color: #e9edf3;
 }
 
 footer {

@@ -2,102 +2,90 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Auto-Like test harness</title>
+  <title>ck-auto-like-instagram test harness</title>
   <style>
     body { font: 14px/1.5 system-ui, sans-serif; margin: 0; padding: 24px; background: #fafafa; }
     article { width: 420px; margin: 0 0 24px; padding: 12px; background: #fff; border: 1px solid #ddd; border-radius: 10px; }
     button { border: 0; background: none; cursor: pointer; padding: 4px; }
     svg { display: block; }
     .offscreen { position: absolute; top: -3000px; }
-    #log { width: 420px; font-family: ui-monospace, monospace; font-size: 12px; white-space: pre-wrap; background: #111; color: #ddd; padding: 12px; border-radius: 10px; }
+    #log, #log2 { width: 420px; font-family: ui-monospace, monospace; font-size: 12px; white-space: pre-wrap; background: #111; color: #ddd; padding: 12px; border-radius: 10px; }
     .controls { margin-bottom: 16px; padding: 12px; background: #eee; border-radius: 8px; }
     .controls button { margin-right: 8px; padding: 6px 12px; background: #3b82f6; color: #fff; border-radius: 4px; cursor: pointer; }
     .controls button:hover { background: #2563eb; }
     .controls button.stop { background: #e5484d; }
     .controls button.stop:hover { background: #c0392b; }
+    select, input { padding: 4px 8px; margin-right: 8px; }
+    h3 { margin: 16px 0 8px; }
   </style>
 </head>
 <body>
-  <h1>Fake feed (Feed mode test)</h1>
+  <h1>ck-auto-like-instagram test harness</h1>
 
   <div class="controls">
-    <button id="btnStartFeed">Start Feed</button>
-    <button id="btnStopFeed" class="stop">Stop Feed</button>
+    <label>Personality:
+      <select id="personalitySelect">
+        <option value="careful">Careful Observer</option>
+        <option value="casual" selected>Casual Browser</option>
+        <option value="efficient">Efficient Scroller</option>
+      </select>
+    </label>
+    <button id="btnApplyPersonality">Apply Personality</button>
+    <button id="btnStart" class="stop" style="background:#3b82f6;">Start</button>
+    <button id="btnStop" class="stop">Stop</button>
     <button id="btnReset">Reset All</button>
   </div>
 
-  <article>
-    <a href="/p/POST_ONE/">post one</a>
-    <button class="post-like"><svg aria-label="Like" width="24" height="24" viewBox="0 0 24 24"><path d="M12 21s-8-4.5-8-10a5 5 0 0 1 8-4 5 5 0 0 1 8 4c0 5.5-8 10-8 10z" fill="none" stroke="#333" stroke-width="1.5"/></svg></button>
-    <button class="comment-like"><svg aria-label="Like" width="12" height="12" viewBox="0 0 24 24"><path d="M12 21s-8-4.5-8-10a5 5 0 0 1 8-4 5 5 0 0 1 8 4c0 5.5-8 10-8 10z" fill="none" stroke="#999" stroke-width="1.5"/></svg></button>
-  </article>
-
-  <article>
-    <a href="/p/POST_TWO/">post two</a>
-    <button class="post-like"><svg aria-label="Like" width="24" height="24" viewBox="0 0 24 24"><path d="M12 21s-8-4.5-8-10a5 5 0 0 1 8-4 5 5 0 0 1 8 4c0 5.5-8 10-8 10z" fill="none" stroke="#333" stroke-width="1.5"/></svg></button>
-  </article>
-
-  <article>
-    <a href="/p/POST_THREE/">post three</a>
-    <button class="post-like"><svg aria-label="Like" width="24" height="24" viewBox="0 0 24 24"><path d="M12 21s-8-4.5-8-10a5 5 0 0 1 8-4 5 5 0 0 1 8 4c0 5.5-8 10-8 10z" fill="none" stroke="#333" stroke-width="1.5"/></svg></button>
-  </article>
-
-  <div id="log"></div>
-
-  <hr style="margin: 32px 0;">
-
-  <h1>Fake profile page (Followers mode test)</h1>
-  <div class="controls">
-    <button id="btnStartFollowers">Start Followers</button>
-    <button id="btnStopFollowers" class="stop">Stop Followers</button>
-  </div>
-
-  <div id="fakeProfile" style="display:none;">
-    <h3>Profile: @testuser</h3>
+  <h2>Fake Profile Page (follower posts)</h2>
+  <div id="fakeProfile">
     <article>
-      <a href="/p/FOLLOWER_POST_1/">follower post 1</a>
+      <a href="/p/FOLLOWER_POST_1/">follower post 1 (photo)</a>
       <button class="post-like"><svg aria-label="Like" width="24" height="24" viewBox="0 0 24 24"><path d="M12 21s-8-4.5-8-10a5 5 0 0 1 8-4 5 5 0 0 1 8 4c0 5.5-8 10-8 10z" fill="none" stroke="#333" stroke-width="1.5"/></svg></button>
     </article>
     <article>
-      <a href="/p/FOLLOWER_POST_2/">follower post 2</a>
+      <a href="/p/FOLLOWER_POST_2/">follower post 2 (reel)</a>
       <button class="post-like"><svg aria-label="Like" width="24" height="24" viewBox="0 0 24 24"><path d="M12 21s-8-4.5-8-10a5 5 0 0 1 8-4 5 5 0 0 1 8 4c0 5.5-8 10-8 10z" fill="none" stroke="#333" stroke-width="1.5"/></svg></button>
     </article>
     <article>
-      <a href="/p/FOLLOWER_POST_3/">follower post 3</a>
+      <a href="/p/FOLLOWER_POST_3/">follower post 3 (photo)</a>
       <button class="post-like"><svg aria-label="Like" width="24" height="24" viewBox="0 0 24 24"><path d="M12 21s-8-4.5-8-10a5 5 0 0 1 8-4 5 5 0 0 1 8 4c0 5.5-8 10-8 10z" fill="none" stroke="#333" stroke-width="1.5"/></svg></button>
     </article>
   </div>
 
-  <div id="log2" style="margin-top: 16px;"></div>
+  <div id="log" style="margin-top: 16px;"></div>
 
   <script>
     /* Minimal chrome.* shim so content.js can run on a plain page. */
     (() => {
       const store = {
         igAutoLike: {
-          // Feed mode
-          feedEnabled: false,
-          feedMinDelay: 300,
-          feedMaxDelay: 700,
-          feedMaxLikes: 5,
-          feedAutoScroll: false,
-
-          // Followers mode
-          followersEnabled: false,
+          personality: "casual",
+          enabled: false,
           targets: ["testuser"],
           maxFollowersPerProfile: 3,
           maxLikesPerFollower: 2,
-          delayBetweenFollowersMin: 200,
-          delayBetweenFollowersMax: 500,
-          delayBetweenLikesMin: 100,
-          delayBetweenLikesMax: 300,
-          delayBetweenProfilesMin: 500,
-          delayBetweenProfilesMax: 1000,
-
-          // Shared
+          delayBetweenFollowersFast: 200,
+          delayBetweenFollowersSlow: 500,
+          delayBetweenLikesFast: 100,
+          delayBetweenLikesSlow: 300,
+          delayBetweenProfilesFast: 500,
+          delayBetweenProfilesSlow: 1000,
+          sessionBreakEvery: 10,
+          sessionBreakMin: 500,
+          sessionBreakMax: 1000,
+          watchVideoProbability: 0.5,
+          readCaptionProbability: 0.5,
+          commentsEnabled: false,
+          commentEmojis: "❤️ 🔥 😍 👏 🙌 😎 💯 ✨ 🌟 💪 🎉 🥰 😊 👍 💖 🌈 ☀️ 🌸 🦄 🍀",
+          commentProbability: 50,
+          commentDelayMin: 100,
+          commentDelayMax: 300,
           likeCount: 0,
+          commentCount: 0,
           likedCodes: [],
           owner: "",
+          actionsInSession: 0,
+          lastSessionBreak: 0,
         },
       };
       const listeners = [];
@@ -122,7 +110,6 @@
         runtime: { onMessage: { addListener: () => {} } },
         tabs: {
           query: (opts, cb) => {
-            // Mock tab for instagram.com
             cb([{ id: 1, url: "https://www.instagram.com/", active: true }]);
           },
           sendMessage: (tabId, msg, cb) => {
@@ -139,13 +126,11 @@
 
     const log = (msg) => {
       document.getElementById("log").textContent += msg + "\n";
-    };
-    const log2 = (msg) => {
-      document.getElementById("log2").textContent += msg + "\n";
+      document.getElementById("log").scrollTop = document.getElementById("log").scrollHeight;
     };
 
-    // Feed page click handlers
-    document.querySelectorAll("article").forEach((article) => {
+    // Click handlers for fake posts
+    document.querySelectorAll("#fakeProfile article").forEach((article) => {
       const code = article.querySelector("a").getAttribute("href").split("/")[2];
       article.querySelectorAll("button").forEach((btn) => {
         btn.addEventListener("click", (event) => {
@@ -162,66 +147,48 @@
       });
     });
 
-    // Followers profile page click handlers
-    document.querySelectorAll("#fakeProfile article").forEach((article) => {
-      const code = article.querySelector("a").getAttribute("href").split("/")[2];
-      article.querySelectorAll("button").forEach((btn) => {
-        btn.addEventListener("click", (event) => {
-          const svg = btn.querySelector("svg");
-          if (svg.getAttribute("aria-label") === "Like") {
-            svg.setAttribute("aria-label", "Unlike");
-            svg.style.fill = "#ed4956";
-            svg.style.stroke = "none";
-            btn.dataset.liked = "1";
-            log2("clicked " + code + " via " + btn.className);
-          }
-          event.stopPropagation();
-        });
-      });
+    // Control buttons
+    document.getElementById("btnApplyPersonality").addEventListener("click", () => {
+      const personality = document.getElementById("personalitySelect").value;
+      store.igAutoLike.personality = personality;
+      // Apply personality defaults (simplified for test)
+      const P = {
+        careful: { maxFollowersPerProfile: 8, maxLikesPerFollower: 2, delayBetweenFollowersFast: 25000, delayBetweenFollowersSlow: 60000, delayBetweenLikesFast: 12000, delayBetweenLikesSlow: 30000, delayBetweenProfilesFast: 90000, delayBetweenProfilesSlow: 180000, commentProbability: 15, watchVideoProbability: 0.8, readCaptionProbability: 0.9, sessionBreakEvery: 15, sessionBreakMin: 120000, sessionBreakMax: 300000 },
+        casual: { maxFollowersPerProfile: 12, maxLikesPerFollower: 3, delayBetweenFollowersFast: 15000, delayBetweenFollowersSlow: 35000, delayBetweenLikesFast: 8000, delayBetweenLikesSlow: 20000, delayBetweenProfilesFast: 60000, delayBetweenProfilesSlow: 120000, commentProbability: 35, watchVideoProbability: 0.5, readCaptionProbability: 0.6, sessionBreakEvery: 25, sessionBreakMin: 60000, sessionBreakMax: 180000 },
+        efficient: { maxFollowersPerProfile: 20, maxLikesPerFollower: 4, delayBetweenFollowersFast: 8000, delayBetweenFollowersSlow: 18000, delayBetweenLikesFast: 4000, delayBetweenLikesSlow: 10000, delayBetweenProfilesFast: 30000, delayBetweenProfilesSlow: 60000, commentProbability: 20, watchVideoProbability: 0.3, readCaptionProbability: 0.3, sessionBreakEvery: 40, sessionBreakMin: 30000, sessionBreakMax: 90000 },
+      }[personality];
+      Object.assign(store.igAutoLike, P);
+      const changes = { igAutoLike: { newValue: JSON.parse(JSON.stringify(store.igAutoLike)) } };
+      listeners.forEach(fn => fn(changes, "local"));
+      log(">>> Personality applied: " + personality);
     });
 
-    // Control buttons for testing
-    document.getElementById("btnStartFeed").addEventListener("click", () => {
-      store.igAutoLike.feedEnabled = true;
+    document.getElementById("btnStart").addEventListener("click", () => {
+      store.igAutoLike.enabled = true;
       store.igAutoLike.owner = "test-tab";
-      // Trigger onChanged
+      store.igAutoLike.targets = ["testuser"];
       const changes = { igAutoLike: { newValue: JSON.parse(JSON.stringify(store.igAutoLike)) } };
       listeners.forEach(fn => fn(changes, "local"));
-      log(">>> Feed mode STARTED");
+      log(">>> STARTED");
     });
-    document.getElementById("btnStopFeed").addEventListener("click", () => {
-      store.igAutoLike.feedEnabled = false;
+    document.getElementById("btnStop").addEventListener("click", () => {
+      store.igAutoLike.enabled = false;
       store.igAutoLike.owner = "";
       const changes = { igAutoLike: { newValue: JSON.parse(JSON.stringify(store.igAutoLike)) } };
       listeners.forEach(fn => fn(changes, "local"));
-      log(">>> Feed mode STOPPED");
-    });
-    document.getElementById("btnStartFollowers").addEventListener("click", () => {
-      store.igAutoLike.followersEnabled = true;
-      store.igAutoLike.owner = "test-tab";
-      document.getElementById("fakeProfile").style.display = "block";
-      const changes = { igAutoLike: { newValue: JSON.parse(JSON.stringify(store.igAutoLike)) } };
-      listeners.forEach(fn => fn(changes, "local"));
-      log2(">>> Followers mode STARTED");
-    });
-    document.getElementById("btnStopFollowers").addEventListener("click", () => {
-      store.igAutoLike.followersEnabled = false;
-      store.igAutoLike.owner = "";
-      document.getElementById("fakeProfile").style.display = "none";
-      const changes = { igAutoLike: { newValue: JSON.parse(JSON.stringify(store.igAutoLike)) } };
-      listeners.forEach(fn => fn(changes, "local"));
-      log2(">>> Followers mode STOPPED");
+      log(">>> STOPPED");
     });
     document.getElementById("btnReset").addEventListener("click", () => {
       store.igAutoLike.likeCount = 0;
+      store.igAutoLike.commentCount = 0;
       store.igAutoLike.likedCodes = [];
-      store.igAutoLike.feedEnabled = false;
-      store.igAutoLike.followersEnabled = false;
+      store.igAutoLike.enabled = false;
       store.igAutoLike.owner = "";
+      store.igAutoLike.actionsInSession = 0;
+      store.igAutoLike.lastSessionBreak = 0;
       const changes = { igAutoLike: { newValue: JSON.parse(JSON.stringify(store.igAutoLike)) } };
       listeners.forEach(fn => fn(changes, "local"));
       log(">>> RESET");
-      log2(">>> RESET");
     });
   </script>
   <script src="../content.js"></script>

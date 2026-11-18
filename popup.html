@@ -9,70 +9,116 @@
   <header>
     <span class="dot" id="dot"></span>
     <h1>ck-auto-like-instagram</h1>
-    <span class="count" id="count">0/20</span>
+    <span class="count" id="count">❤️0 💬0</span>
   </header>
 
   <p class="status" id="status">Idle</p>
 
-  <div class="mode-toggle">
-    <button class="mode-btn active" id="modeFeed" type="button">Feed</button>
-    <button class="mode-btn" id="modeFollowers" type="button">Followers</button>
-  </div>
-
-  <!-- Feed Mode -->
-  <div id="feedPanel">
-    <button id="feedToggle" class="primary">Start Feed</button>
-
-    <div class="grid">
-      <label for="feedMin">Min delay</label>
-      <span class="field"><input id="feedMin" type="number" min="0.5" max="120" step="0.5" /> <em>s</em></span>
-
-      <label for="feedMax">Max delay</label>
-      <span class="field"><input id="feedMax" type="number" min="0.5" max="120" step="0.5" /> <em>s</em></span>
-
-      <label for="feedLimit">Max likes</label>
-      <span class="field"><input id="feedLimit" type="number" min="1" max="500" step="1" /></span>
-
-      <label for="feedScroll">Auto-scroll feed</label>
-      <span class="field"><input id="feedScroll" type="checkbox" /></span>
+  <div class="section">
+    <div class="section-title">Personality Preset</div>
+    <select id="personality"></select>
+    <div class="help" id="personalityDesc"></div>
+    <div class="preset-buttons">
+      <button class="preset-btn" id="presetCareful" type="button">Careful</button>
+      <button class="preset-btn" id="presetCasual" type="button">Casual</button>
+      <button class="preset-btn" id="presetEfficient" type="button">Efficient</button>
     </div>
   </div>
 
-  <!-- Followers Mode -->
-  <div id="followersPanel" hidden>
-    <div class="grid" style="grid-template-columns: 1fr;">
-      <label for="targets" style="grid-column: 1;">Target profiles (one per line, @ optional)</label>
-      <textarea id="targets" rows="4" style="grid-column: 1;"></textarea>
-    </div>
+  <div class="section">
+    <div class="section-title">Target Profiles</div>
+    <label for="targets">Profiles (one per line, @ optional)</label>
+    <textarea id="targets" rows="4" placeholder="profile1&#10;profile2&#10;profile3"></textarea>
+  </div>
 
+  <div class="section">
+    <div class="section-title">Limits</div>
     <div class="grid">
       <label for="maxFollowers">Max followers/profile</label>
       <span class="field"><input id="maxFollowers" type="number" min="1" max="500" step="1" /></span>
 
       <label for="maxLikesPerFollower">Max likes/follower</label>
       <span class="field"><input id="maxLikesPerFollower" type="number" min="1" max="50" step="1" /></span>
-
-      <label for="delayFollowersMin">Delay followers min</label>
-      <span class="field"><input id="delayFollowersMin" type="number" min="1" max="600" step="1" /> <em>s</em></span>
-
-      <label for="delayFollowersMax">Delay followers max</label>
-      <span class="field"><input id="delayFollowersMax" type="number" min="1" max="600" step="1" /> <em>s</em></span>
-
-      <label for="delayLikesMin">Delay likes min</label>
-      <span class="field"><input id="delayLikesMin" type="number" min="1" max="600" step="1" /> <em>s</em></span>
-
-      <label for="delayLikesMax">Delay likes max</label>
-      <span class="field"><input id="delayLikesMax" type="number" min="1" max="600" step="1" /> <em>s</em></span>
-
-      <label for="delayProfilesMin">Delay profiles min</label>
-      <span class="field"><input id="delayProfilesMin" type="number" min="1" max="600" step="1" /> <em>s</em></span>
-
-      <label for="delayProfilesMax">Delay profiles max</label>
-      <span class="field"><input id="delayProfilesMax" type="number" min="1" max="600" step="1" /> <em>s</em></span>
     </div>
-
-    <button id="followersToggle" class="primary">Start Followers</button>
   </div>
+
+  <div class="section">
+    <div class="section-title">Human-Like Delays (medians in seconds)</div>
+    <div class="help">Log-normal distribution with fast/slow modes. Actual delays vary naturally.</div>
+    <div class="grid">
+      <label for="delayFollowersFast">Between followers (fast)</label>
+      <span class="field"><input id="delayFollowersFast" type="number" min="3" max="120" step="1" /> <em>s</em></span>
+
+      <label for="delayFollowersSlow">Between followers (slow)</label>
+      <span class="field"><input id="delayFollowersSlow" type="number" min="3" max="300" step="1" /> <em>s</em></span>
+
+      <label for="delayLikesFast">Between likes (fast)</label>
+      <span class="field"><input id="delayLikesFast" type="number" min="2" max="60" step="1" /> <em>s</em></span>
+
+      <label for="delayLikesSlow">Between likes (slow)</label>
+      <span class="field"><input id="delayLikesSlow" type="number" min="2" max="120" step="1" /> <em>s</em></span>
+
+      <label for="delayProfilesFast">Between profiles (fast)</label>
+      <span class="field"><input id="delayProfilesFast" type="number" min="10" max="300" step="1" /> <em>s</em></span>
+
+      <label for="delayProfilesSlow">Between profiles (slow)</label>
+      <span class="field"><input id="delayProfilesSlow" type="number" min="10" max="600" step="1" /> <em>s</em></span>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Session Breaks (fatigue simulation)</div>
+    <div class="grid">
+      <label for="sessionBreakEvery">Break every N actions</label>
+      <span class="field"><input id="sessionBreakEvery" type="number" min="5" max="100" step="1" /></span>
+
+      <label for="sessionBreakMin">Break min</label>
+      <span class="field"><input id="sessionBreakMin" type="number" min="10" max="600" step="10" /> <em>s</em></span>
+
+      <label for="sessionBreakMax">Break max</label>
+      <span class="field"><input id="sessionBreakMax" type="number" min="10" max="1200" step="10" /> <em>s</em></span>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Content Interaction</div>
+    <div class="grid">
+      <label for="watchVideoProbability">Watch videos (%)</label>
+      <span class="field"><input id="watchVideoProbability" type="number" min="0" max="100" step="5" /> <em>%</em></span>
+
+      <label for="readCaptionProbability">Read captions (%)</label>
+      <span class="field"><input id="readCaptionProbability" type="number" min="0" max="100" step="5" /> <em>%</em></span>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Comments (Optional)</div>
+    <div class="grid">
+      <label for="commentsEnabled">Enable comments</label>
+      <span class="field"><input id="commentsEnabled" type="checkbox" /></span>
+    </div>
+    <div class="grid" style="grid-template-columns: 1fr;">
+      <label for="commentEmojis" style="grid-column: 1;">Emojis (space separated)</label>
+      <input id="commentEmojis" type="text" placeholder="❤️ 🔥 😍 👏 ..." style="grid-column: 1;" />
+    </div>
+    <div class="grid">
+      <label for="commentProbability">Comment probability (%)</label>
+      <span class="field"><input id="commentProbability" type="number" min="0" max="100" step="1" /> <em>%</em></span>
+    </div>
+    <div class="grid">
+      <label for="commentDelayMin">Before comment min</label>
+      <span class="field"><input id="commentDelayMin" type="number" min="1" max="60" step="1" /> <em>s</em></span>
+
+      <label for="commentDelayMax">Before comment max</label>
+      <span class="field"><input id="commentDelayMax" type="number" min="1" max="60" step="1" /> <em>s</em></span>
+    </div>
+    <div class="grid">
+      <label>Preview:</label>
+      <span class="emoji-preview" id="emojiPreview"></span>
+    </div>
+  </div>
+
+  <button id="toggle" class="primary">Start</button>
 
   <footer>
     <button id="reset" class="link">Reset All Counters</button>
