@@ -14,24 +14,68 @@
 
   <p class="status" id="status">Idle</p>
 
-  <button id="toggle" class="primary">Start</button>
+  <div class="mode-toggle">
+    <button class="mode-btn active" id="modeFeed" type="button">Feed</button>
+    <button class="mode-btn" id="modeFollowers" type="button">Followers</button>
+  </div>
 
-  <div class="grid">
-    <label for="min">Min delay</label>
-    <span class="field"><input id="min" type="number" min="0.5" max="120" step="0.5" /> <em>s</em></span>
+  <!-- Feed Mode -->
+  <div id="feedPanel">
+    <button id="feedToggle" class="primary">Start Feed</button>
 
-    <label for="max">Max delay</label>
-    <span class="field"><input id="max" type="number" min="0.5" max="120" step="0.5" /> <em>s</em></span>
+    <div class="grid">
+      <label for="feedMin">Min delay</label>
+      <span class="field"><input id="feedMin" type="number" min="0.5" max="120" step="0.5" /> <em>s</em></span>
 
-    <label for="limit">Max likes</label>
-    <span class="field"><input id="limit" type="number" min="1" max="500" step="1" /></span>
+      <label for="feedMax">Max delay</label>
+      <span class="field"><input id="feedMax" type="number" min="0.5" max="120" step="0.5" /> <em>s</em></span>
 
-    <label for="scroll">Auto-scroll feed</label>
-    <span class="field"><input id="scroll" type="checkbox" /></span>
+      <label for="feedLimit">Max likes</label>
+      <span class="field"><input id="feedLimit" type="number" min="1" max="500" step="1" /></span>
+
+      <label for="feedScroll">Auto-scroll feed</label>
+      <span class="field"><input id="feedScroll" type="checkbox" /></span>
+    </div>
+  </div>
+
+  <!-- Followers Mode -->
+  <div id="followersPanel" hidden>
+    <div class="grid" style="grid-template-columns: 1fr;">
+      <label for="targets" style="grid-column: 1;">Target profiles (one per line, @ optional)</label>
+      <textarea id="targets" rows="4" style="grid-column: 1;"></textarea>
+    </div>
+
+    <div class="grid">
+      <label for="maxFollowers">Max followers/profile</label>
+      <span class="field"><input id="maxFollowers" type="number" min="1" max="500" step="1" /></span>
+
+      <label for="maxLikesPerFollower">Max likes/follower</label>
+      <span class="field"><input id="maxLikesPerFollower" type="number" min="1" max="50" step="1" /></span>
+
+      <label for="delayFollowersMin">Delay followers min</label>
+      <span class="field"><input id="delayFollowersMin" type="number" min="1" max="600" step="1" /> <em>s</em></span>
+
+      <label for="delayFollowersMax">Delay followers max</label>
+      <span class="field"><input id="delayFollowersMax" type="number" min="1" max="600" step="1" /> <em>s</em></span>
+
+      <label for="delayLikesMin">Delay likes min</label>
+      <span class="field"><input id="delayLikesMin" type="number" min="1" max="600" step="1" /> <em>s</em></span>
+
+      <label for="delayLikesMax">Delay likes max</label>
+      <span class="field"><input id="delayLikesMax" type="number" min="1" max="600" step="1" /> <em>s</em></span>
+
+      <label for="delayProfilesMin">Delay profiles min</label>
+      <span class="field"><input id="delayProfilesMin" type="number" min="1" max="600" step="1" /> <em>s</em></span>
+
+      <label for="delayProfilesMax">Delay profiles max</label>
+      <span class="field"><input id="delayProfilesMax" type="number" min="1" max="600" step="1" /> <em>s</em></span>
+    </div>
+
+    <button id="followersToggle" class="primary">Start Followers</button>
   </div>
 
   <footer>
-    <button id="reset" class="link">Reset counter</button>
+    <button id="reset" class="link">Reset All Counters</button>
     <a href="https://www.instagram.com/" target="_blank" rel="noreferrer">Open Instagram</a>
   </footer>
 

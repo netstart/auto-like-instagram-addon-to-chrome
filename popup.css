@@ -7,7 +7,7 @@
 }
 
 body {
-  width: 288px;
+  width: 320px;
   margin: 0;
   padding: 14px;
   background: #15171b;
@@ -55,6 +55,36 @@ h1 {
   min-height: 17px;
 }
 
+.mode-toggle {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.mode-btn {
+  flex: 1;
+  padding: 7px 10px;
+  border: 1px solid rgba(255,255,255,.13);
+  border-radius: 8px;
+  background: #1d2026;
+  color: #c2cad6;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.mode-btn:hover {
+  background: #252930;
+}
+
+.mode-btn.active {
+  background: #3b82f6;
+  color: #fff;
+  border-color: #3b82f6;
+}
+
 .primary {
   width: 100%;
   padding: 9px 12px;
@@ -73,6 +103,11 @@ h1 {
 
 .primary.stop {
   background: #e5484d;
+}
+
+.primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .grid {
@@ -109,6 +144,28 @@ input[type="number"] {
 
 input[type="number"]:focus {
   outline: 1px solid #3b82f6;
+}
+
+input[type="text"],
+textarea {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 7px;
+  background: #1d2026;
+  color: #e9edf3;
+  font: inherit;
+  font-size: 12px;
+}
+
+input[type="text"]:focus,
+textarea:focus {
+  outline: 1px solid #3b82f6;
+}
+
+textarea {
+  resize: vertical;
+  min-height: 70px;
 }
 
 input[type="checkbox"] {
