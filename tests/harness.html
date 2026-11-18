@@ -25,8 +25,8 @@
   <div class="controls">
     <label>Personality:
       <select id="personalitySelect">
-        <option value="careful">Careful Observer</option>
-        <option value="casual" selected>Casual Browser</option>
+        <option value="careful" selected>Careful Observer</option>
+        <option value="casual">Casual Browser</option>
         <option value="efficient">Efficient Scroller</option>
       </select>
     </label>
@@ -59,7 +59,7 @@
     (() => {
       const store = {
         igAutoLike: {
-          personality: "casual",
+          personality: "careful",
           enabled: false,
           targets: ["testuser"],
           maxFollowersPerProfile: 3,
@@ -162,6 +162,11 @@
       listeners.forEach(fn => fn(changes, "local"));
       log(">>> Personality applied: " + personality);
     });
+    // Apply careful defaults on load
+    const carefulDefaults = {
+      maxFollowersPerProfile: 8, maxLikesPerFollower: 2, delayBetweenFollowersFast: 25000, delayBetweenFollowersSlow: 60000, delayBetweenLikesFast: 12000, delayBetweenLikesSlow: 30000, delayBetweenProfilesFast: 90000, delayBetweenProfilesSlow: 180000, commentProbability: 15, watchVideoProbability: 0.8, readCaptionProbability: 0.9, sessionBreakEvery: 15, sessionBreakMin: 120000, sessionBreakMax: 300000,
+    };
+    Object.assign(store.igAutoLike, carefulDefaults);
 
     document.getElementById("btnStart").addEventListener("click", () => {
       store.igAutoLike.enabled = true;

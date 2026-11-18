@@ -60,7 +60,7 @@ const PERSONALITIES = {
 };
 
 const DEFAULTS = {
-  personality: "casual",
+  personality: "careful",
   maxFollowersPerProfile: 12,
   maxLikesPerFollower: 3,
   delayBetweenFollowersFast: 15000,

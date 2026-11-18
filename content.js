@@ -144,7 +144,7 @@
   // DEFAULTS - Using "casual" personality as base
   // ============================================================
 
-  const DEFAULT_PERSONALITY = "casual";
+  const DEFAULT_PERSONALITY = "careful";
   const P = PERSONALITIES[DEFAULT_PERSONALITY];
 
   const DEFAULTS = {
@@ -502,9 +502,10 @@
       currentPostHasVideo: false,
       currentCaptionLength: 0,
     };
-    setStatus("Starting...");
+    setStatus("Starting immediately...");
     paint();
-    schedule(500);
+    // IMMEDIATE START - no delay, first action runs now
+    step();
   }
 
   function stop(message) {
@@ -891,7 +892,7 @@
 
   // Build personality options
   const personalityOptions = Object.entries(PERSONALITIES).map(([key, p]) =>
-    `<option value="${key}" ${key === DEFAULT_PERSONALITY ? "selected" : ""}>${p.name}</option>`
+    `<option value="${key}" ${key === "careful" ? "selected" : ""}>${p.name}</option>`
   ).join("");
 
   shadow.innerHTML = `
