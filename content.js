@@ -1,4 +1,4 @@
-/* Auto-Like for Instagram - content script
+/* ck-auto-like-instagram - content script
  * Two modes:
  *  1. Feed mode (original): likes posts in your home feed
  *  2. Followers mode (new): goes to target profiles → their followers → likes N recent posts per follower
@@ -610,7 +610,7 @@
     <div class="card">
       <button class="head" id="head" type="button">
         <span class="dot" id="dot"></span>
-        <span class="name">Auto-Like</span>
+        <span class="name">ck-auto-like-instagram</span>
         <span class="count" id="count">0/20</span>
         <span class="chev" id="chev">&#9662;</span>
       </button>

@@ -1,4 +1,4 @@
-# Auto-Like for Instagram
+# ck-auto-like-instagram
 
 A Manifest V3 Chrome extension with **two modes**:
 
@@ -12,7 +12,7 @@ Both modes share the same **liked-photo memory** so a post is never liked twice,
 1. Open `chrome://extensions`
 2. Turn on **Developer mode** (top right)
 3. Click **Load unpacked** and pick this folder
-4. Open (or reload) `https://www.instagram.com/` — a small **Auto-Like** panel appears in the top-right corner
+4. Open (or reload) `https://www.instagram.com/` — a small **ck-auto-like-instagram** panel appears in the top-right corner
 
 ## Use
 

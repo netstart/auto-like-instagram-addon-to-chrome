@@ -1,4 +1,4 @@
-/* Auto-Like for Instagram - popup controller (dual mode) */
+/* ck-auto-like-instagram - popup controller (dual mode) */
 const KEY = "igAutoLike";
 const DEFAULTS = {
   // Feed mode
