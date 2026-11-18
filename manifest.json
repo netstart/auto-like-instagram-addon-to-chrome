@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Auto-Like for Instagram",
+  "version": "1.0.0",
+  "description": "Likes posts in your Instagram feed at a human pace, with delay, limit and auto-scroll controls.",
+  "permissions": ["storage", "scripting"],
+  "host_permissions": ["https://www.instagram.com/*"],
+  "action": {
+    "default_title": "Auto-Like for Instagram",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.instagram.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Auto-Like test harness</title>
+  <style>
+    body { font: 14px/1.5 system-ui, sans-serif; margin: 0; padding: 24px; background: #fafafa; }
+    article { width: 420px; margin: 0 0 24px; padding: 12px; background: #fff; border: 1px solid #ddd; border-radius: 10px; }
+    button { border: 0; background: none; cursor: pointer; padding: 4px; }
+    svg { display: block; }
+    .offscreen { position: absolute; top: -3000px; }
+    #log { width: 420px; font-family: ui-monospace, monospace; font-size: 12px; white-space: pre-wrap; background: #111; color: #ddd; padding: 12px; border-radius: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Fake feed</h1>
+
+  <article>
+    <a href="/p/POST_ONE/">post one</a>
+    <button class="post-like"><svg aria-label="Like" width="24" height="24" viewBox="0 0 24 24"><path d="M12 21s-8-4.5-8-10a5 5 0 0 1 8-4 5 5 0 0 1 8 4c0 5.5-8 10-8 10z" fill="none" stroke="#333" stroke-width="1.5"/></svg></button>
+    <button class="comment-like"><svg aria-label="Like" width="12" height="12" viewBox="0 0 24 24"><path d="M12 21s-8-4.5-8-10a5 5 0 0 1 8-4 5 5 0 0 1 8 4c0 5.5-8 10-8 10z" fill="none" stroke="#999" stroke-width="1.5"/></svg></button>
+  </article>
+
+  <article>
+    <a href="/p/POST_TWO/">post two</a>
+    <button class="post-like"><svg aria-label="Like" width="24" height="24" viewBox="0 0 24 24"><path d="M12 21s-8-4.5-8-10a5 5 0 0 1 8-4 5 5 0 0 1 8 4c0 5.5-8 10-8 10z" fill="none" stroke="#333" stroke-width="1.5"/></svg></button>
+  </article>
+
+  <article>
+    <a href="/p/POST_THREE/">post three</a>
+    <button class="post-like"><svg aria-label="Like" width="24" height="24" viewBox="0 0 24 24"><path d="M12 21s-8-4.5-8-10a5 5 0 0 1 8-4 5 5 0 0 1 8 4c0 5.5-8 10-8 10z" fill="none" stroke="#333" stroke-width="1.5"/></svg></button>
+  </article>
+
+  <div id="log"></div>
+
+  <script>
+    /* Minimal chrome.* shim so content.js can run on a plain page. */
+    (() => {
+      const store = {
+        igAutoLike: {
+          enabled: false,
+          minDelay: 300,
+          maxDelay: 700,
+          maxLikes: 5,
+          likeCount: 0,
+          autoScroll: false,
+          likedCodes: [],
+          owner: "",
+        },
+      };
+      const listeners = [];
+      window.chrome = {
+        storage: {
+          local: {
+            get(key, cb) {
+              setTimeout(() => cb({ [key]: store[key] }), 0);
+            },
+            set(obj, cb) {
+              const changes = {};
+              for (const k of Object.keys(obj)) {
+                changes[k] = { newValue: JSON.parse(JSON.stringify(obj[k])) };
+                store[k] = changes[k].newValue;
+              }
+              setTimeout(() => listeners.forEach((fn) => fn(changes, "local")), 0);
+              if (cb) cb();
+            },
+          },
+          onChanged: { addListener: (fn) => listeners.push(fn) },
+        },
+        runtime: { onMessage: { addListener: () => {} } },
+      };
+      window.__store = store;
+      window.__igalTestMode = true;
+    })();
+
+    const log = (msg) => {
+      document.getElementById("log").textContent += msg + "\n";
+    };
+
+    document.querySelectorAll("article").forEach((article) => {
+      const code = article.querySelector("a").getAttribute("href").split("/")[2];
+      article.querySelectorAll("button").forEach((btn) => {
+        btn.addEventListener("click", (event) => {
+          const svg = btn.querySelector("svg");
+          if (svg.getAttribute("aria-label") === "Like") {
+            svg.setAttribute("aria-label", "Unlike");
+            svg.style.fill = "#ed4956";
+            svg.style.stroke = "none";
+            btn.dataset.liked = "1";
+            log("clicked " + code + " via " + btn.className);
+          }
+          event.stopPropagation();
+        });
+      });
+    });
+  </script>
+  <script src="../content.js"></script>
+</body>
+</html>
