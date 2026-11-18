@@ -532,7 +532,7 @@
     return PERSONALITIES[state.personality] || PERSONALITIES[DEFAULT_PERSONALITY];
   }
 
-  function step() {
+  async function step() {
     timer = null;
     if (!running) return;
     if (!state.enabled) return;
