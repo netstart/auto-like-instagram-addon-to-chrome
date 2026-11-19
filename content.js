@@ -885,12 +885,35 @@
     .foot { display: flex; justify-content: space-between; align-items: center; color: #6f7885; font-size: 11px; }
     .link {
       background: none; border: 0; padding: 0; color: #7f8b9c;
-      font: inherit; font-size: 11px; cursor: pointer; text-decoration: underline;
+      font: inherit; font-size: 11px; cursor: pointer; text-decoration: underline.
     }
     .link:hover { color: #b7c1cd; }
     .emoji-preview { font-size: 14px; line-height: 1.5; min-height: 20px; }
     .help { font-size: 10px; color: #6f7885; margin-top: 2px; }
     .preset-btn { font-size: 11px; padding: 4px 8px; margin-right: 4px; }
+
+    /* Floating Action Button (FAB) */
+    .fab {
+      width: 56px; height: 56px; border-radius: 28px;
+      background: #3b82f6; color: #fff;
+      border: none; cursor: pointer;
+      box-shadow: 0 6px 20px rgba(0,0,0,.4);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px; transition: transform .2s, background .2s;
+      z-index: 2147483646;
+    }
+    .fab:hover { transform: scale(1.1); background: #2563eb; }
+    .fab:active { transform: scale(0.95); }
+    .fab.running { background: #e5484d; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100% { box-shadow: 0 6px 20px rgba(229,72,77,.4); } 50% { box-shadow: 0 6px 30px rgba(229,72,77,.7); } }
+    .fab[hidden] { display: none; }
+
+    /* Panel positioned relative to FAB */
+    .panel-wrapper {
+      position: fixed; top: 12px; right: 12px; z-index: 2147483647;
+      display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+    }
+    .panel-wrapper.collapsed .card { display: none; }
   `;
 
   const root = document.createElement("div");
@@ -905,56 +928,57 @@
 
   shadow.innerHTML = `
     <style>${CSS}</style>
-    <div class="card">
-      <button class="head" id="head" type="button">
-        <span class="dot" id="dot"></span>
-        <span class="name">ck-auto-like-instagram</span>
-        <span class="count" id="count">❤️0 💬0</span>
-        <span class="chev" id="chev">&#9662;</span>
-      </button>
-      <div class="body" id="body">
-        <div class="status" id="status">Idle</div>
+    <div class="panel-wrapper" id="panelWrapper">
+      <div class="card" id="card">
+        <button class="head" id="head" type="button">
+          <span class="dot" id="dot"></span>
+          <span class="name">ck-auto-like-instagram</span>
+          <span class="count" id="count">❤️0 💬0</span>
+          <span class="chev" id="chev">&#9662;</span>
+        </button>
+        <div class="body" id="body">
+          <div class="status" id="status">Idle</div>
 
-        <div class="section">
-          <div class="section-title">Personality Preset</div>
-          <div class="row" style="flex-direction:column;align-items:flex-start;gap:6px;">
-            <select id="personality">${personalityOptions}</select>
-            <div class="help" id="personalityDesc"></div>
-            <div style="display:flex;gap:4px;flex-wrap:wrap;">
-              <button class="primary preset-btn" id="presetCareful" type="button">Careful</button>
-              <button class="primary preset-btn" id="presetCasual" type="button">Casual</button>
-              <button class="primary preset-btn" id="presetEfficient" type="button">Efficient</button>
+          <div class="section">
+            <div class="section-title">Personality Preset</div>
+            <div class="row" style="flex-direction:column;align-items:flex-start;gap:6px;">
+              <select id="personality">${personalityOptions}</select>
+              <div class="help" id="personalityDesc"></div>
+              <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                <button class="primary preset-btn" id="presetCareful" type="button">Careful</button>
+                <button class="primary preset-btn" id="presetCasual" type="button">Casual</button>
+                <button class="primary preset-btn" id="presetEfficient" type="button">Efficient</button>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div class="section">
-          <div class="section-title">Target Profiles</div>
-          <div class="row" style="flex-direction:column;align-items:flex-start;gap:4px;">
-            <label for="targets">Profiles (one per line, @ optional)</label>
-            <textarea id="targets" rows="3" placeholder="profile1&#10;profile2&#10;profile3"></textarea>
+          <div class="section">
+            <div class="section-title">Target Profiles</div>
+            <div class="row" style="flex-direction:column;align-items:flex-start;gap:4px;">
+              <label for="targets">Profiles (one per line, @ optional)</label>
+              <textarea id="targets" rows="3" placeholder="profile1&#10;profile2&#10;profile3"></textarea>
+            </div>
           </div>
-        </div>
 
-        <div class="section">
-          <div class="section-title">Limits</div>
-          <div class="row">
-            <label for="maxFollowers">Max followers/profile</label>
-            <span class="value"><input id="maxFollowers" type="number" min="1" max="500" step="1"></span>
+          <div class="section">
+            <div class="section-title">Limits</div>
+            <div class="row">
+              <label for="maxFollowers">Max followers/profile</label>
+              <span class="value"><input id="maxFollowers" type="number" min="1" max="500" step="1"></span>
+            </div>
+            <div class="row">
+              <label for="maxLikesPerFollower">Max likes/follower</label>
+              <span class="value"><input id="maxLikesPerFollower" type="number" min="1" max="50" step="1"></span>
+            </div>
           </div>
-          <div class="row">
-            <label for="maxLikesPerFollower">Max likes/follower</label>
-            <span class="value"><input id="maxLikesPerFollower" type="number" min="1" max="50" step="1"></span>
-          </div>
-        </div>
 
-        <div class="section">
-          <div class="section-title">Human-Like Delays (medians in seconds)</div>
-          <div class="help">Uses log-normal distribution with fast/slow modes. Actual delays vary naturally.</div>
-          <div class="row">
-            <label for="delayFollowersFast">Between followers (fast)</label>
-            <span class="value"><input id="delayFollowersFast" type="number" min="3" max="120" step="1"></span>
-          </div>
+          <div class="section">
+            <div class="section-title">Human-Like Delays (medians in seconds)</div>
+            <div class="help">Uses log-normal distribution with fast/slow modes. Actual delays vary naturally.</div>
+            <div class="row">
+              <label for="delayFollowersFast">Between followers (fast)</label>
+              <span class="value"><input id="delayFollowersFast" type="number" min="3" max="120" step="1"></span>
+            </div>
           <div class="row">
             <label for="delayFollowersSlow">Between followers (slow/distracted)</label>
             <span class="value"><input id="delayFollowersSlow" type="number" min="3" max="300" step="1"></span>
@@ -1041,6 +1065,9 @@
         </div>
       </div>
     </div>
+
+    <!-- Floating Action Button (FAB) -->
+    <button class="fab" id="fab" type="button" title="Open ck-auto-like-instagram">❤️</button>
   `;
 
   const el = {};
@@ -1053,10 +1080,11 @@
     "sessionBreakEvery","sessionBreakMin","sessionBreakMax",
     "watchVideoProbability","readCaptionProbability",
     "commentsEnabled","commentEmojis","commentProbability","commentDelayMin","commentDelayMax",
-    "emojiPreview","toggle","reset","hint"];
+    "emojiPreview","toggle","reset","hint",
+    "fab","panelWrapper","card"];
   ids.forEach(id => { el[id] = shadow.getElementById(id); });
 
-  let collapsed = false;
+  let collapsed = true; // Start collapsed (only FAB visible)
 
   const PERSONALITY_DESCRIPTIONS = {
     careful: "Slow, reads captions, watches videos, low action volume. Safest for main accounts.",
@@ -1104,6 +1132,17 @@
     updateEmojiPreview();
 
     el.status.textContent = statusText;
+
+    // Update FAB
+    if (el.fab) {
+      el.fab.classList.toggle("running", isRunning);
+      el.fab.textContent = isRunning ? "⏹" : "❤️";
+    }
+
+    // Update panel visibility
+    if (el.panelWrapper) {
+      el.panelWrapper.classList.toggle("collapsed", collapsed);
+    }
   }
 
   function updateEmojiPreview() {
@@ -1172,6 +1211,23 @@
     collapsed = !collapsed;
     el.body.hidden = collapsed;
     el.chev.innerHTML = collapsed ? "&#9656;" : "&#9662;";
+    if (el.panelWrapper) {
+      el.panelWrapper.classList.toggle("collapsed", collapsed);
+    }
+  });
+
+  // FAB click - toggle panel
+  el.fab.addEventListener("click", () => {
+    collapsed = !collapsed;
+    if (el.panelWrapper) {
+      el.panelWrapper.classList.toggle("collapsed", collapsed);
+    }
+    if (el.head) {
+      el.chev.innerHTML = collapsed ? "&#9656;" : "&#9662;";
+    }
+    if (el.body) {
+      el.body.hidden = collapsed;
+    }
   });
 
   // Personality preset buttons
