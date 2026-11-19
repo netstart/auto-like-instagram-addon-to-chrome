@@ -854,7 +854,7 @@
     .name { font-weight: 600; letter-spacing: .01em; }
     .count { margin-left: auto; color: #9aa4b2; font-size: 12px; font-variant-numeric: tabular-nums; }
     .chev { color: #6b7480; font-size: 10px; }
-    .body { display: grid; gap: 9px; padding: 0 12px 12px; }
+    .body { display: grid; gap: 9px; padding: 0 12px 12px; max-height: 70vh; overflow-y: auto; }
     .body[hidden] { display: none; }
     .section { border-top: 1px solid rgba(255,255,255,.06); padding-top: 8px; margin-top: 4px; }
     .section:first-child { border-top: none; margin-top: 0; padding-top: 0; }
